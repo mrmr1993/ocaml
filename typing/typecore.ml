@@ -3235,12 +3235,12 @@ and type_expect_
       begin_def ();
       (* Create a fake abstract type declaration for name. *)
       let decl = {
-        type_params = [];
+        type_params = List.init params (fun _ -> newvar ());
         type_arity = params;
         type_kind = Type_abstract;
         type_private = Public;
         type_manifest = None;
-        type_variance = [];
+        type_variance = List.init params (fun _ -> Variance.may_inv);
         type_is_newtype = true;
         type_expansion_scope = Btype.lowest_level;
         type_loc = loc;
@@ -3266,7 +3266,7 @@ and type_expect_
         end
       in
       let ety = Subst.type_expr Subst.identity body.exp_type in
-      replace ety;
+      if params <= 0 then replace ety;
       (* back to original level *)
       end_def ();
       (* lower the levels of the result type *)
