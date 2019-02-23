@@ -400,7 +400,7 @@ module E = struct
     | Pexp_poly (e, t) ->
         sub.expr sub e; iter_opt (sub.typ sub) t
     | Pexp_object cls -> sub.class_structure sub cls
-    | Pexp_newtype (_s, e) -> sub.expr sub e
+    | Pexp_newtype (_s, _i, e) -> sub.expr sub e
     | Pexp_pack me -> sub.module_expr sub me
     | Pexp_open (o, e) ->
         sub.open_declaration sub o; sub.expr sub e

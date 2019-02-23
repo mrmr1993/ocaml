@@ -335,7 +335,7 @@ let pat_of_label ~loc lbl =
 
 let mk_newtypes ~loc newtypes exp =
   let mkexp = mkexp ~loc in
-  List.fold_right (fun newtype exp -> mkexp (Pexp_newtype (newtype, exp)))
+  List.fold_right (fun (newtype, params) exp -> mkexp (Pexp_newtype (newtype, params, exp)))
     newtypes exp
 
 let wrap_type_annotation ~loc newtypes core_type body =
@@ -343,6 +343,7 @@ let wrap_type_annotation ~loc newtypes core_type body =
   let mk_newtypes = mk_newtypes ~loc in
   let exp = mkexp(Pexp_constraint(body,core_type)) in
   let exp = mk_newtypes newtypes exp in
+  let newtypes = List.map (fun (newtype, _params) -> newtype) newtypes in
   (exp, ghtyp(Ptyp_poly(newtypes, Typ.varify_constructors newtypes core_type)))
 
 let wrap_exp_attrs ~loc body (ext, attrs) =
@@ -2336,8 +2337,14 @@ labeled_simple_expr:
   | OPTLABEL simple_expr %prec below_HASH
       { (Optional $1, $2) }
 ;
+%inline newtype:
+    x = mkrhs(LIDENT)
+      { (x, 0) }
+  | LPAREN params = UNDERSCORE+ RPAREN x = mkrhs(LIDENT)
+      { (x, List.length params) }
+;
 %inline lident_list:
-  xs = mkrhs(LIDENT)+
+  xs = newtype+
     { xs }
 ;
 %inline let_ident:

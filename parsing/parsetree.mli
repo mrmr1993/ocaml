@@ -361,7 +361,7 @@ and expression_desc =
            for methods (not values). *)
   | Pexp_object of class_structure
         (* object ... end *)
-  | Pexp_newtype of string loc * expression
+  | Pexp_newtype of string loc * int * expression
         (* fun (type t) -> E *)
   | Pexp_pack of module_expr
         (* (module ME)

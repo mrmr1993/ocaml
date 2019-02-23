@@ -743,6 +743,14 @@ and expression2 ctxt f x =
     | _ -> simple_expr ctxt f x
 
 and simple_expr ctxt f x =
+  let newtype_params f x =
+    if x = 1 then
+      pp f "_"
+    else if x > 0 then
+      pp f "_,@ "
+    else
+      ()
+  in
   if x.pexp_attributes <> [] then expression ctxt f x
   else match x.pexp_desc with
     | Pexp_construct _  when is_simple_construct (view_expr x) ->
@@ -762,8 +770,10 @@ and simple_expr ctxt f x =
     | Pexp_constant c -> constant f c;
     | Pexp_pack me ->
         pp f "(module@;%a)" (module_expr ctxt) me
-    | Pexp_newtype (lid, e) ->
+    | Pexp_newtype (lid, 0, e) ->
         pp f "fun@;(type@;%s)@;->@;%a" lid.txt (expression ctxt) e
+    | Pexp_newtype (lid, i, e) ->
+        pp f "fun@;(type@;%a@;%s)@;->@;%a" newtype_params i lid.txt (expression ctxt) e
     | Pexp_tuple l ->
         pp f "@[<hov2>(%a)@]" (list (simple_expr ctxt) ~sep:",@;") l
     | Pexp_constraint (e, ct) ->
@@ -1205,8 +1215,8 @@ and binding ctxt f {pvb_pat=p; pvb_expr=x; _} =
           else
             pp f "%a@ %a"
               (label_exp ctxt) (label,eo,p) pp_print_pexp_function e
-      | Pexp_newtype (str,e) ->
-          pp f "(type@ %s)@ %a" str.txt pp_print_pexp_function e
+      | Pexp_newtype (str, i, e) ->
+          pp f "(type@ %i@ %s)@ %a" i str.txt pp_print_pexp_function e
       | _ -> pp f "=@;%a" (expression ctxt) x
   in
   let tyvars_str tyvars = List.map (fun v -> v.txt) tyvars in
@@ -1220,7 +1230,7 @@ and binding ctxt f {pvb_pat=p; pvb_expr=x; _} =
       | _ -> None in
     let rec gadt_exp tyvars e =
       match e with
-      | {pexp_desc=Pexp_newtype (tyvar, e); pexp_attributes=[]} ->
+      | {pexp_desc=Pexp_newtype (tyvar, 0, e); pexp_attributes=[]} ->
           gadt_exp (tyvar :: tyvars) e
       | {pexp_desc=Pexp_constraint (e, ct); pexp_attributes=[]} ->
           Some (List.rev tyvars, e, ct)

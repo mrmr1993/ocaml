@@ -127,7 +127,7 @@ and exp_extra =
          *)
   | Texp_poly of core_type option
         (** Used for method bodies. *)
-  | Texp_newtype of string
+  | Texp_newtype of string * int
         (** fun (type t) ->  *)
 
 and expression_desc =

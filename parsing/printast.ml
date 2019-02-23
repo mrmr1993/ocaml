@@ -367,8 +367,8 @@ and expression i ppf x =
   | Pexp_object s ->
       line i ppf "Pexp_object\n";
       class_structure i ppf s
-  | Pexp_newtype (s, e) ->
-      line i ppf "Pexp_newtype \"%s\"\n" s.txt;
+  | Pexp_newtype (s, params, e) ->
+      line i ppf "Pexp_newtype %i \"%s\"\n" params s.txt;
       expression i ppf e
   | Pexp_pack me ->
       line i ppf "Pexp_pack\n";
