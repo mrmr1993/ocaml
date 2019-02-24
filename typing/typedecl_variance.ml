@@ -54,6 +54,7 @@ let compute_variance env visited vari ty =
         compute_same ty2
     | Ttuple tl ->
         List.iter compute_same tl
+    | Tapply ({desc= Tconstr (path, [], _); _}, tl)
     | Tconstr (path, tl, _) ->
         let open Variance in
         if tl = [] then () else begin
@@ -117,6 +118,7 @@ let compute_variance env visited vari ty =
           Variance.(if mem Pos vari || mem Neg vari then full else may_inv)
         in
         List.iter (compute_variance_rec v) tyl
+    | Tapply (ty, tyl) -> List.iter (compute_variance_rec vari) (ty :: tyl)
   in
   compute_variance_rec vari ty
 

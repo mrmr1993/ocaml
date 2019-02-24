@@ -303,6 +303,8 @@ let rec check_unboxed_abstract_arg loc univ ty =
     | Some (_, args) -> List.iter (check_unboxed_abstract_arg loc univ) args
     end
   | Tpoly (t, _) -> check_unboxed_abstract_arg loc univ t
+  | Tapply (t, args) ->
+    List.iter (check_unboxed_abstract_arg loc univ) (t :: args)
 
 and check_unboxed_abstract_row_field loc univ (_, field) =
   match field with
@@ -326,6 +328,7 @@ let rec check_unboxed_gadt_arg loc univ env ty =
     ()
     (* A comment in [Translcore.transl_exp0] claims the above cannot be
        represented by floats. *)
+  | Some {desc = Tapply ({desc= Tconstr (p, [], _); _}, args); _}
   | Some {desc = Tconstr (p, args, _); _} ->
     let tydecl = Env.find_type p env in
     assert (not tydecl.type_unboxed.unboxed);
@@ -334,6 +337,8 @@ let rec check_unboxed_gadt_arg loc univ env ty =
   | Some {desc = Tfield _ | Tlink _ | Tsubst _; _} -> assert false
   | Some {desc = Tunivar _; _} -> ()
   | Some {desc = Tpoly (t2, _); _} -> check_unboxed_gadt_arg loc univ env t2
+  | Some {desc = Tapply (_, args); _} ->
+    List.iter (check_unboxed_abstract_arg loc univ) args
   | None -> ()
       (* This case is tricky: the argument is another (or the same) type
          in the same recursive definition. In this case we don't have to

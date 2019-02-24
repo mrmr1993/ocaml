@@ -871,11 +871,14 @@ let update_level env level ty =
 
 let rec generalize_expansive env var_level visited ty =
   let ty = repr ty in
+  (*Format.eprintf "@[%a@]@." !print_raw ty;*)
   if ty.level = generic_level || ty.level <= var_level then () else
   if not (Hashtbl.mem visited ty.id) then begin
     Hashtbl.add visited ty.id ();
     match ty.desc with
-      Tconstr (path, tyl, abbrev) ->
+      Tapply ({desc = Tconstr (path, [], abbrev); _}, tyl)
+    | Tconstr (path, tyl, abbrev) ->
+        (*Format.eprintf "@[Tconstr@]@.";*)
         let variance =
           try (Env.find_type path env).type_variance
           with Not_found ->
@@ -2578,6 +2581,10 @@ and unify3 env t1 t1' t2 t2' =
           end
       | (Ttuple tl1, Ttuple tl2) ->
           unify_list env tl1 tl2
+      | (Tapply ({desc= Tconstr(p1, [], _); _}, tl1),
+         Tapply ({desc= Tconstr(p2, [], _); _}, tl2))
+      | (Tapply ({desc= Tconstr(p1, [], _); _}, tl1), Tconstr(p2, tl2, _))
+      | (Tconstr (p1, tl1, _), Tapply ({desc= Tconstr(p2, [], _); _}, tl2))
       | (Tconstr (p1, tl1, _), Tconstr (p2, tl2, _)) when Path.same p1 p2 ->
           if !umode = Expression || not !generate_equations then
             unify_list env tl1 tl2
@@ -2678,6 +2685,14 @@ and unify3 env t1 t1' t2 t2' =
           end
       | (Tnil,  Tconstr _ ) -> raise (Unify Trace.[Obj(Abstract_row Second)])
       | (Tconstr _,  Tnil ) -> raise (Unify Trace.[Obj(Abstract_row First)])
+      | (Tapply (t1, tl1), Tconstr(p2, tl2, attrs)) ->
+          let t2 = newty2 t2.level (Tconstr (p2, [], attrs)) in
+          unify env t1 t2; unify_list env tl1 tl2
+      | (Tconstr(p1, tl1, attrs), Tapply (t2, tl2)) ->
+          let t1 = newty2 t1.level (Tconstr (p1, [], attrs)) in
+          unify env t1 t2; unify_list env tl1 tl2
+      | (Tapply (t1, tl1), Tapply (t2, tl2)) ->
+        unify env t1 t2; unify_list env tl1 tl2
       | (_, _) -> raise (Unify [])
       end;
       (* XXX Commentaires + changer "create_recursion"
@@ -3141,6 +3156,10 @@ let rec moregen inst_nongen type_pairs env t1 t2 =
               moregen inst_nongen type_pairs env u1 u2
           | (Ttuple tl1, Ttuple tl2) ->
               moregen_list inst_nongen type_pairs env tl1 tl2
+          | (Tapply ({desc= Tconstr(p1, [], _); _}, tl1),
+             Tapply ({desc= Tconstr(p2, [], _); _}, tl2))
+          | (Tapply ({desc= Tconstr(p1, [], _); _}, tl1), Tconstr(p2, tl2, _))
+          | (Tconstr (p1, tl1, _), Tapply ({desc= Tconstr(p2, [], _); _}, tl2))
           | (Tconstr (p1, tl1, _), Tconstr (p2, tl2, _))
                 when Path.same p1 p2 ->
               moregen_list inst_nongen type_pairs env tl1 tl2
@@ -3165,6 +3184,16 @@ let rec moregen inst_nongen type_pairs env t1 t2 =
                 (moregen inst_nongen type_pairs env)
           | (Tunivar _, Tunivar _) ->
               unify_univar t1' t2' !univar_pairs
+          | (Tapply (t1, tl1), Tapply (t2, tl2)) ->
+              moregen inst_nongen type_pairs env t1 t2;
+              moregen_list inst_nongen type_pairs env tl1 tl2;
+          | (Tapply ({desc= Tvar _}, tl1), Tconstr (p, tl2, attrs))
+            when may_instantiate inst_nongen t1' ->
+              let t2 = newty2 t2.level (Tconstr (p, [], attrs)) in
+              moregen_occur env t1'.level t2;
+              update_scope t1'.scope t2;
+              link_type t1' t2;
+              moregen_list inst_nongen type_pairs env tl1 tl2;
           | (_, _) ->
               raise (Unify [])
         end
@@ -3961,6 +3990,7 @@ let rec build_subtype env visited loops posi level t =
         if c > Unchanged then (t'',c)
         else (t, Unchanged)
       end
+  | Tapply ({desc= Tconstr (p, [], _abbrev); _}, tl)
   | Tconstr(p, tl, _abbrev) ->
       (* Must check recursion on constructors, since we do not always
          expand them *)
@@ -4051,6 +4081,14 @@ let rec build_subtype env visited loops posi level t =
       else (t, Unchanged)
   | Tunivar _ | Tpackage _ ->
       (t, Unchanged)
+  | Tapply (t1, tl) ->
+      if memq_warn t visited then (t, Unchanged) else
+      let visited = t :: visited in
+      let (t1', c1) = build_subtype env visited loops posi level t1 in
+      let tl' = List.map (build_subtype env visited loops posi level) tl in
+      let c = max c1 (collect tl') in
+      if c > Unchanged then (newty (Tapply (t1', List.map fst tl')), c)
+      else (t, Unchanged)
 
 let enlarge_type env ty =
   warn := false;

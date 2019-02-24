@@ -3230,12 +3230,12 @@ and type_expect_
       re { exp with exp_extra =
              (Texp_poly cty, loc, sexp.pexp_attributes) :: exp.exp_extra }
   | Pexp_newtype({txt=name}, params, sbody) ->
-      let ty = newvar () in
+      let ty = newvar ~name () in
       (* remember original level *)
       begin_def ();
       (* Create a fake abstract type declaration for name. *)
       let decl = {
-        type_params = List.init params (fun _ -> newvar ());
+        type_params = List.init params (fun _ -> newgenvar ());
         type_arity = params;
         type_kind = Type_abstract;
         type_private = Public;
@@ -3261,12 +3261,14 @@ and type_expect_
         else begin
           Hashtbl.add seen t.id ();
           match t.desc with
-          | Tconstr (Path.Pident id', _, _) when id == id' -> link_type t ty
+          | Tconstr (Path.Pident id', [], _) when id == id' -> link_type t ty
+          | Tconstr (Path.Pident id', args, _) when id == id' ->
+            link_type t (newty (Tapply (ty, args)))
           | _ -> Btype.iter_type_expr replace t
         end
       in
       let ety = Subst.type_expr Subst.identity body.exp_type in
-      if params <= 0 then replace ety;
+      replace ety;
       (* back to original level *)
       end_def ();
       (* lower the levels of the result type *)

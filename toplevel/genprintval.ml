@@ -481,6 +481,9 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
               tree_of_val (depth - 1) obj ty
           | Tpackage _ ->
               Oval_stuff "<module>"
+          | Tapply (ty, tyl) ->
+              Oval_apply (tree_of_val depth obj ty,
+                List.map (tree_of_val depth obj) tyl)
         end
 
       and tree_of_record_fields depth env path type_params ty_list

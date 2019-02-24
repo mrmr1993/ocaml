@@ -71,6 +71,7 @@ let classify env ty =
   else match ty.desc with
   | Tvar _ | Tunivar _ ->
       Any
+  | Tapply ({desc= Tconstr (p, [], _abbrev); _}, _args)
   | Tconstr (p, _args, _abbrev) ->
       if Path.same p Predef.path_float then Float
       else if Path.same p Predef.path_lazy_t then Lazy
@@ -97,6 +98,7 @@ let classify env ty =
       Addr
   | Tlink _ | Tsubst _ | Tpoly _ | Tfield _ ->
       assert false
+  | Tapply _ -> Any
 
 let array_type_kind env ty =
   match scrape env ty with

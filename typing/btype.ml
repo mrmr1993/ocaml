@@ -120,6 +120,13 @@ let repr t =
      repr_link false t d t'
  | Tfield (_, k, _, t') as d when field_kind_repr k = Fabsent ->
      repr_link false t d t'
+ | Tapply ({desc= Tlink t' as d; _} as tf, tl) ->
+     begin match repr_link false tf d t' with
+     | {desc= Tconstr (p, [], attrs)} -> newty2 t.level (Tconstr (p, tl, attrs))
+     | tf -> newty2 t.level (Tapply (tf, tl))
+     end
+ | Tapply ({desc= Tconstr (p, [], attrs); _}, tl) ->
+     newty2 t.level (Tconstr (p, tl, attrs))
  | _ -> t
 
 let rec commu_repr = function
@@ -275,6 +282,7 @@ let fold_type_expr f init ty =
     let result = f init ty1 in
     f result ty2
   | Ttuple l            -> List.fold_left f init l
+  | Tapply ({desc= Tconstr (_, [], _); _}, l)
   | Tconstr (_, l, _)   -> List.fold_left f init l
   | Tobject(ty, {contents = Some (_, p)})
     ->
@@ -295,6 +303,7 @@ let fold_type_expr f init ty =
     let result = f init ty in
     List.fold_left f result tyl
   | Tpackage (_, _, l)  -> List.fold_left f init l
+  | Tapply (ty, tyl)    -> List.fold_left f (f init ty) tyl
 
 let iter_type_expr f ty =
   fold_type_expr (fun () v -> f v) () ty
@@ -477,6 +486,7 @@ let rec copy_type_desc ?(keep_names=false) f = function
       let tyl = List.map (fun x -> norm_univar (f x)) tyl in
       Tpoly (f ty, tyl)
   | Tpackage (p, n, l)  -> Tpackage (p, n, List.map f l)
+  | Tapply (ty, tyl)    -> Tapply (f ty, List.map f tyl)
 
 (* Utilities for copying *)
 

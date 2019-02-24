@@ -128,6 +128,8 @@ and type_desc =
 
   | Tpackage of Path.t * Longident.t list * type_expr list
   (** Type of a first-class module (a.k.a package). *)
+  | Tapply of type_expr * type_expr list
+  (** [Tapply (Tvar (Some "a"), [e1;...;en])] ==> [(e1, ..., en) 'a] *)
 
 (** [  `X | `Y ]       (row_closed = true)
     [< `X | `Y ]       (row_closed = true)
