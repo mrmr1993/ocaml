@@ -2499,6 +2499,14 @@ let rec unify (env:Env.t ref) t1 t2 =
         with Cannot_expand ->
           unify2 env t1 t2
         end
+    | (Tapply (t1, tl1), Tconstr(p2, tl2, attrs)) ->
+        let t2 = newty2 t2.level (Tconstr (p2, [], attrs)) in
+        unify_list env tl1 tl2; unify env t1 t2
+    | (Tconstr(p1, tl1, attrs), Tapply (t2, tl2)) ->
+        let t1 = newty2 t1.level (Tconstr (p1, [], attrs)) in
+        unify_list env tl1 tl2; unify env t1 t2
+    | (Tapply (t1, tl1), Tapply (t2, tl2)) ->
+      unify_list env tl1 tl2; unify env t1 t2
     | _ ->
         unify2 env t1 t2
     end;
@@ -2685,14 +2693,6 @@ and unify3 env t1 t1' t2 t2' =
           end
       | (Tnil,  Tconstr _ ) -> raise (Unify Trace.[Obj(Abstract_row Second)])
       | (Tconstr _,  Tnil ) -> raise (Unify Trace.[Obj(Abstract_row First)])
-      | (Tapply (t1, tl1), Tconstr(p2, tl2, attrs)) ->
-          let t2 = newty2 t2.level (Tconstr (p2, [], attrs)) in
-          unify env t1 t2; unify_list env tl1 tl2
-      | (Tconstr(p1, tl1, attrs), Tapply (t2, tl2)) ->
-          let t1 = newty2 t1.level (Tconstr (p1, [], attrs)) in
-          unify env t1 t2; unify_list env tl1 tl2
-      | (Tapply (t1, tl1), Tapply (t2, tl2)) ->
-        unify env t1 t2; unify_list env tl1 tl2
       | (_, _) -> raise (Unify [])
       end;
       (* XXX Commentaires + changer "create_recursion"
