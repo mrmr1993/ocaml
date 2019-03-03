@@ -871,14 +871,12 @@ let update_level env level ty =
 
 let rec generalize_expansive env var_level visited ty =
   let ty = repr ty in
-  (*Format.eprintf "@[%a@]@." !print_raw ty;*)
   if ty.level = generic_level || ty.level <= var_level then () else
   if not (Hashtbl.mem visited ty.id) then begin
     Hashtbl.add visited ty.id ();
     match ty.desc with
       Tapply ({desc = Tconstr (path, [], abbrev); _}, tyl)
     | Tconstr (path, tyl, abbrev) ->
-        (*Format.eprintf "@[Tconstr@]@.";*)
         let variance =
           try (Env.find_type path env).type_variance
           with Not_found ->
