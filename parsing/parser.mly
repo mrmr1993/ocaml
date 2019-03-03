@@ -2340,7 +2340,7 @@ labeled_simple_expr:
 %inline newtype:
     x = mkrhs(LIDENT)
       { (x, 0) }
-  | LPAREN params = UNDERSCORE+ RPAREN x = mkrhs(LIDENT)
+  | LPAREN params = separated_nonempty_llist(COMMA, UNDERSCORE) RPAREN x = mkrhs(LIDENT)
       { (x, List.length params) }
 ;
 %inline lident_list:
