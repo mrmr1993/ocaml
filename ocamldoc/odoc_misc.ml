@@ -488,6 +488,7 @@ let remove_option typ =
     match t with
     | Types.Tconstr(path, [ty], _) when Path.same path Predef.path_option -> ty.Types.desc
     | Types.Tconstr _
+    | Types.Tapply _
     | Types.Tvar _
     | Types.Tunivar _
     | Types.Tpoly _

@@ -82,6 +82,7 @@ let parameter_list_from_arrows typ =
     | Types.Tvar _
     | Types.Ttuple _
     | Types.Tconstr _
+    | Types.Tapply _
     | Types.Tobject _
     | Types.Tfield _
     | Types.Tnil

@@ -35,6 +35,7 @@ let rec is_arrow_type t =
   | Types.Tlink t2 | Types.Tsubst t2 -> is_arrow_type t2
   | Types.Ttuple _
   | Types.Tconstr _
+  | Types.Tapply _
   | Types.Tvar _ | Types.Tunivar _ | Types.Tobject _ | Types.Tpoly _
   | Types.Tfield _ | Types.Tnil | Types.Tvariant _ | Types.Tpackage _ -> false
 
@@ -45,7 +46,8 @@ let raw_string_of_type_list sep type_list =
     match t.Types.desc with
       Types.Tarrow _ | Types.Ttuple _ -> true
     | Types.Tlink t2 | Types.Tsubst t2 -> need_parent t2
-    | Types.Tconstr _ ->
+    | Types.Tconstr _
+    | Types.Tapply _ ->
         false
     | Types.Tvar _ | Types.Tunivar _ | Types.Tobject _ | Types.Tpoly _
     | Types.Tfield _ | Types.Tnil | Types.Tvariant _ | Types.Tpackage _ -> false
