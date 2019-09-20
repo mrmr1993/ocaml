@@ -592,6 +592,7 @@ let mk_directive ~loc name arg =
 %token COLONGREATER
 %token COMMA
 %token CONSTRAINT
+%token CURRENT
 %token DO
 %token DONE
 %token DOT
@@ -1183,6 +1184,11 @@ module_expr:
       me1 = module_expr LPAREN RPAREN
         { (* TODO review mkmod location *)
           Pmod_apply(me1, mkmod ~loc:$sloc (Pmod_structure [])) }
+    | me1 = module_expr LPAREN _id = CURRENT RPAREN
+        { Pmod_apply
+            ( me1
+            , mkmod ~loc:$loc(_id)
+                (Pmod_ident (mkrhs (Lident "##current##") $loc(_id))) ) }
     | (* An extension. *)
       ex = extension
         { Pmod_extension ex }

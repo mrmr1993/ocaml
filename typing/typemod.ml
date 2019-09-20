@@ -1754,6 +1754,52 @@ let wrap_constraint env mark arg mty explicit =
     mod_attributes = [];
     mod_loc = arg.mod_loc }
 
+let current_structure_env = ref None
+
+let current_structure_names = ref None
+
+let current_structure_parts = ref []
+
+let get_current_structure () =
+  let names =
+    match !current_structure_names with
+    | Some names -> names
+    | None -> assert false
+  in
+  let env =
+    match !current_structure_env with
+    | Some env -> env
+    | None -> assert false
+  in
+  let (str, sg) =
+    List.fold_left (fun (str_rem, sig_rem) (str, sg) ->
+        (str :: str_rem, sg @ sig_rem))
+      ([], []) !current_structure_parts
+  in
+  let str = { str_items = str; str_type = sg; str_final_env = env } in
+  let md =
+    rm { mod_desc = Tmod_structure str;
+         mod_type = Mty_signature sg;
+         mod_env = env;
+         mod_attributes = [];
+         mod_loc = Location.none }
+  in
+  let sg' = Signature_names.simplify env names sg in
+  if List.length sg' = List.length sg then md else
+  wrap_constraint env false md (Mty_signature sg')
+    Tmodtype_implicit
+
+let () =
+  Env.get_current_structure := (fun () ->
+    let md = get_current_structure () in
+    let env = md.mod_env in
+    let md =
+      { md_type = md.mod_type;
+        md_attributes = md.mod_attributes;
+        md_loc = md.mod_loc }
+    in
+    (md, env))
+
 (* Type a module value expression *)
 
 let rec type_module ?(alias=false) sttn funct_body anchor env smod =
@@ -1762,7 +1808,9 @@ let rec type_module ?(alias=false) sttn funct_body anchor env smod =
 
 and type_module_aux ~alias sttn funct_body anchor env smod =
   match smod.pmod_desc with
-    Pmod_ident lid ->
+    Pmod_ident ({txt= Lident "##current##"; _}) ->
+      get_current_structure ()
+  | Pmod_ident lid ->
       let path =
         Env.lookup_module_path ~load:(not alias) ~loc:smod.pmod_loc lid.txt env
       in
@@ -2278,6 +2326,8 @@ and type_structure ?(toplevel = false) funct_body anchor env sstr scope =
         let previous_saved_types = Cmt_format.get_saved_types () in
         let desc, sg, new_env = type_str_item env srem pstr in
         let str = { str_desc = desc; str_loc = pstr.pstr_loc; str_env = env } in
+        current_structure_env := Some new_env;
+        current_structure_parts := (str, sg) :: !current_structure_parts;
         Cmt_format.set_saved_types (Cmt_format.Partial_structure_item str
                                     :: previous_saved_types);
         let (str_rem, sig_rem, final_env) = type_struct new_env srem in
@@ -2288,7 +2338,16 @@ and type_structure ?(toplevel = false) funct_body anchor env sstr scope =
     List.iter (function {pstr_loc = l} -> Stypes.record_phrase l) sstr;
   let previous_saved_types = Cmt_format.get_saved_types () in
   let run () =
+    let prev_structure_names = !current_structure_names in
+    let prev_structure_env = !current_structure_env in
+    let prev_structure_parts = !current_structure_parts in
+    current_structure_names := Some names;
+    current_structure_env := Some env;
+    current_structure_parts := [];
     let (items, sg, final_env) = type_struct env sstr in
+    current_structure_names := prev_structure_names;
+    current_structure_env := prev_structure_env;
+    current_structure_parts := prev_structure_parts;
     let str = { str_items = items; str_type = sg; str_final_env = final_env } in
     Cmt_format.set_saved_types
       (Cmt_format.Partial_structure str :: previous_saved_types);

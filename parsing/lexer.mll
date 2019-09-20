@@ -460,6 +460,7 @@ rule token = parse
         lexbuf.lex_curr_p <- { curpos with pos_cnum = curpos.pos_cnum - 1 };
         STAR
       }
+  | "##current##" { CURRENT }
   | "#"
       { let at_beginning_of_line pos = (pos.pos_cnum = pos.pos_bol) in
         if not (at_beginning_of_line lexbuf.lex_start_p)

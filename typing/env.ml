@@ -679,30 +679,6 @@ end
 let set_unit_name = Current_unit_name.set
 let get_unit_name = Current_unit_name.get
 
-let find_same_module id tbl =
-  match IdTbl.find_same id tbl with
-  | x -> x
-  | exception Not_found
-    when Ident.persistent id && not (Current_unit_name.is_name_of id) ->
-      Mod_persistent
-
-let find_name_module ~mark name tbl =
-  match IdTbl.find_name wrap_module ~mark name tbl with
-  | x -> x
-  | exception Not_found when not (Current_unit_name.is name) ->
-      let path = Pident(Ident.create_persistent name) in
-      path, Mod_persistent
-
-let add_persistent_structure id env =
-  if not (Ident.persistent id) then invalid_arg "Env.add_persistent_structure";
-  if not (Current_unit_name.is_name_of id) then
-    { env with
-      modules = IdTbl.add id Mod_persistent env.modules;
-      summary = Env_persistent (env.summary, id);
-    }
-  else
-    env
-
 let components_of_module ~alerts ~loc env fs ps path addr mty =
   {
     alerts;
@@ -716,6 +692,50 @@ let components_of_module ~alerts ~loc env fs ps path addr mty =
       cm_mty = mty
     }
   }
+
+let get_current_structure = ref (fun () -> assert false)
+
+let get_current_module () =
+  let md, env = !get_current_structure () in
+  let addr = EnvLazy.create_forced (Aident Ident.current) in
+  let comps =
+    components_of_module ~alerts:Misc.Stdlib.String.Map.empty
+      ~loc:Location.none env None Subst.identity
+      (Pident Ident.current) addr md.md_type
+  in
+  { mda_declaration = EnvLazy.create_forced md;
+    mda_components = comps;
+    mda_address = addr }
+
+let find_same_module id tbl =
+  match IdTbl.find_same id tbl with
+  | x -> x
+  | exception Not_found
+    when Ident.same id Ident.current ->
+      Mod_local (get_current_module ())
+  | exception Not_found
+    when Ident.persistent id && not (Current_unit_name.is_name_of id) ->
+      Mod_persistent
+
+let find_name_module ~mark name tbl =
+  match IdTbl.find_name wrap_module ~mark name tbl with
+  | x -> x
+  | exception Not_found when not (Current_unit_name.is name) ->
+      if name = "##current##" then
+        Pident(Ident.current), Mod_local (get_current_module ())
+      else
+        let path = Pident(Ident.create_persistent name) in
+        path, Mod_persistent
+
+let add_persistent_structure id env =
+  if not (Ident.persistent id) then invalid_arg "Env.add_persistent_structure";
+  if not (Current_unit_name.is_name_of id) then
+    { env with
+      modules = IdTbl.add id Mod_persistent env.modules;
+      summary = Env_persistent (env.summary, id);
+    }
+  else
+    env
 
 let sign_of_cmi ~freshen { Persistent_env.Persistent_signature.cmi; _ } =
   let name = cmi.cmi_name in

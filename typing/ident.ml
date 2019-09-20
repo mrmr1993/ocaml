@@ -23,6 +23,7 @@ type t =
   | Predef of { name: string; stamp: int }
       (* the stamp is here only for fast comparison, but the name of
          predefined identifiers is always unique. *)
+  | Current
 
 (* A stamp of 0 denotes a persistent identifier *)
 
@@ -44,11 +45,14 @@ let create_predef s =
 let create_persistent s =
   Global s
 
+let current = Current
+
 let name = function
   | Local { name; _ }
   | Scoped { name; _ }
   | Global name
   | Predef { name; _ } -> name
+  | Current -> "##current##"
 
 let rename = function
   | Local { name; stamp = _ }
@@ -70,12 +74,14 @@ let unique_name = function
       (* we know that none of the predef names (currently) finishes in
          "_<some number>", and that their name is unique. *)
       name
+  | Current -> "##current##"
 
 let unique_toplevel_name = function
   | Local { name; stamp }
   | Scoped { name; stamp } -> name ^ "/" ^ Int.to_string stamp
   | Global name
   | Predef { name; _ } -> name
+  | Current -> "##current##"
 
 let persistent = function
   | Global _ -> true
@@ -90,6 +96,7 @@ let equal i1 i2 =
   | Predef { stamp = s1; _ }, Predef { stamp = s2 } ->
       (* if they don't have the same stamp, they don't have the same name *)
       s1 = s2
+  | Current, Current -> true
   | _ ->
       false
 
@@ -108,7 +115,7 @@ let stamp = function
 
 let scope = function
   | Scoped { scope; _ } -> scope
-  | Local _ -> highest_scope
+  | Local _ | Current -> highest_scope
   | Global _ | Predef _ -> lowest_scope
 
 let reinit_level = ref (-1)
@@ -120,7 +127,8 @@ let reinit () =
 
 let global = function
   | Local _
-  | Scoped _ -> false
+  | Scoped _
+  | Current -> false
   | Global _
   | Predef _ -> true
 
@@ -142,6 +150,8 @@ let print ~with_scope ppf =
       fprintf ppf "%s%s%s" name
         (if !Clflags.unique_ids then sprintf "/%i" n else "")
         (if with_scope then sprintf "[%i]" scope else "")
+  | Current ->
+      fprintf ppf "##current##!"
 
 let print_with_scope ppf id = print ~with_scope:true ppf id
 
@@ -339,6 +349,9 @@ let compare x y =
   | Global _, _ -> 1
   | _, Global _ -> (-1)
   | Predef { stamp = s1; _ }, Predef { stamp = s2; _ } -> compare s1 s2
+  | Predef _, _ -> 1
+  | _, Predef _ -> (-1)
+  | Current, Current -> 0
 
 let output oc id = output_string oc (unique_name id)
 let hash i = (Char.code (name i).[0]) lxor (stamp i)

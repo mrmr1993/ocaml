@@ -34,6 +34,10 @@ val create_local: string -> t
 val create_persistent: string -> t
 val create_predef: string -> t
 
+val current : t
+        (** An identifier for the quasi-module representing the current state
+            of the current structure. *)
+
 val rename: t -> t
         (** Creates an identifier with the same name as the input, a fresh
             stamp, and no scope.
