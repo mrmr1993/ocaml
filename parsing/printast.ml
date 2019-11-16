@@ -141,6 +141,7 @@ let arg_label i ppf = function
   | Nolabel -> line i ppf "Nolabel\n"
   | Optional s -> line i ppf "Optional \"%s\"\n" s
   | Labelled s -> line i ppf "Labelled \"%s\"\n" s
+  | Module (_ : uninhabited) -> .
 ;;
 
 let rec core_type i ppf x =

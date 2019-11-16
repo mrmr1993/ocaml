@@ -411,6 +411,7 @@ let expression sub exp =
         Pexp_fun (label, None, Pat.var ~loc {loc;txt = name },
           Exp.match_ ~loc (Exp.ident ~loc {loc;txt= Lident name})
                           (List.map (sub.case sub) cases))
+    | Texp_function { arg_label = Module _ ; _ } -> .
     | Texp_apply (exp, list) ->
         Pexp_apply (sub.expr sub exp,
           List.fold_right (fun (label, expo) list ->

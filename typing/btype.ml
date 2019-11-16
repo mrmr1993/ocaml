@@ -684,11 +684,13 @@ let label_name = function
     Nolabel -> ""
   | Labelled s
   | Optional s -> s
+  | Module (_ : uninhabited) -> .
 
 let prefixed_label_name = function
     Nolabel -> ""
   | Labelled s -> "~" ^ s
   | Optional s -> "?" ^ s
+  | Module (_ : uninhabited) -> .
 
 let rec extract_label_aux hd l = function
     [] -> raise Not_found

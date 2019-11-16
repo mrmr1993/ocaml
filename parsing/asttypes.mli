@@ -52,6 +52,7 @@ type 'module_type arg_label =
     Nolabel
   | Labelled of string (*  label:T -> ... *)
   | Optional of string (* ?label:T -> ... *)
+  | Module of 'module_type
 
 type 'a loc = 'a Location.loc = {
   txt : 'a;

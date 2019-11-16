@@ -285,6 +285,7 @@ and type_with_label ctxt f (label, c) =
   | Nolabel    -> core_type1 ctxt f c (* otherwise parenthesize *)
   | Labelled s -> pp f "%s:%a" s (core_type1 ctxt) c
   | Optional s -> pp f "?%s:%a" s (core_type1 ctxt) c
+  | Module (_ : uninhabited) -> .
 
 and core_type ctxt f x =
   if x.ptyp_attributes <> [] then begin
@@ -506,11 +507,14 @@ and label_exp ctxt f (l,opt,p) =
                  rest (pattern1 ctxt) p (expression ctxt) o
            | None -> pp f "?%s:%a@;" rest (simple_pattern ctxt) p)
       end
-  | Labelled l -> match p with
+  | Labelled l ->
+    begin match p with
     | {ppat_desc  = Ppat_var {txt;_}; ppat_attributes = []}
       when txt = l ->
         pp f "~%s@;" l
     | _ ->  pp f "~%s:%a@;" l (simple_pattern ctxt) p
+    end
+  | Module (_ : uninhabited) -> .
 
 and sugar_expr ctxt f e =
   if e.pexp_attributes <> [] then false
@@ -1600,6 +1604,7 @@ and label_x_expression_param ctxt f (l,e) =
         pp f "~%s" lbl
       else
         pp f "~%s:%a" lbl (simple_expr ctxt) e
+  | Module (_ : uninhabited) -> .
 
 and directive_argument f x =
   match x.pdira_desc with

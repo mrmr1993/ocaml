@@ -474,6 +474,7 @@ let string_of_label = function
     Nolabel -> ""
   | Labelled s -> s
   | Optional s -> "?"^s
+  | Asttypes.Module (_ : uninhabited) -> .
 
 let visited = ref []
 let rec raw_type ppf ty =
