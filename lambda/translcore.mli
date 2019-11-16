@@ -26,7 +26,7 @@ val transl_exp: expression -> lambda
 val transl_apply: ?should_be_tailcall:bool
                   -> ?inlined:inline_attribute
                   -> ?specialised:specialise_attribute
-                  -> lambda -> (arg_label * expression option) list
+                  -> lambda -> (uninhabited arg_label * expression option) list
                   -> Location.t -> lambda
 val transl_let: rec_flag -> value_binding list -> lambda -> lambda
 

@@ -197,15 +197,15 @@ val forget_abbrev:
 
 (**** Utilities for labels ****)
 
-val is_optional : arg_label -> bool
-val label_name : arg_label -> label
+val is_optional : uninhabited arg_label -> bool
+val label_name : uninhabited arg_label -> label
 
 (* Returns the label name with first character '?' or '~' as appropriate. *)
-val prefixed_label_name : arg_label -> label
+val prefixed_label_name : uninhabited arg_label -> label
 
 val extract_label :
-    label -> (arg_label * 'a) list ->
-    arg_label * 'a * (arg_label * 'a) list * (arg_label * 'a) list
+    label -> (uninhabited arg_label * 'a) list ->
+    uninhabited arg_label * 'a * (uninhabited arg_label * 'a) list * (uninhabited arg_label * 'a) list
     (* actual label, value, before list, after list *)
 
 (**** Utilities for backtracking ****)
