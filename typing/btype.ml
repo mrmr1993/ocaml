@@ -680,11 +680,13 @@ let check_memorized_abbrevs () =
 
 let is_optional = function Optional _ -> true | _ -> false
 
+let is_module = function Module _ -> true | _ -> false
+
 let label_name = function
     Nolabel -> ""
   | Labelled s
   | Optional s -> s
-  | Module (_ : uninhabited) -> .
+  | Module m -> Ident.name m
 
 let prefixed_label_name = function
     Nolabel -> ""

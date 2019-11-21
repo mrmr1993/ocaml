@@ -791,11 +791,11 @@ val create_index_lists : 'a list -> ('a -> string) -> 'a list list
 val remove_option : Types.type_expr -> Types.type_expr
 
 (** Return [true] if the given label is optional.*)
-val is_optional : Asttypes.uninhabited Asttypes.arg_label -> bool
+val is_optional : _ Asttypes.arg_label -> bool
 
 (** Return the label name for the given label,
    i.e. removes the beginning '?' if present.*)
-val label_name : Asttypes.uninhabited Asttypes.arg_label -> string
+val label_name : Ident.t Asttypes.arg_label -> string
 
 (** Return the given name where the module name or
    part of it was removed, according to the list of modules

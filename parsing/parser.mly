@@ -3171,6 +3171,18 @@ function_type:
         { Ptyp_arrow(label, domain, codomain) }
     )
     { $1 }
+  | mktyp (
+      LBRACE
+      name = UIDENT
+      COLON
+      domain = package_type
+      RBRACE
+      MINUSGREATER
+      codomain = function_type
+        { Ptyp_arrow(Module name, domain, codomain) }
+    )
+    { $1 }
+
 ;
 %inline arg_label:
   | label = optlabel

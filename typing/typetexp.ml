@@ -205,6 +205,13 @@ and transl_type_aux env policy styp =
       if Btype.is_optional l
       then newty (Tconstr(Predef.path_option,[ty1], ref Mnil))
       else ty1 in
+    let l =
+      match l with
+      | Nolabel -> Nolabel
+      | Labelled l -> Labelled l
+      | Optional l -> Optional l
+      | Module m -> Module (Ident.create_scoped ~scope:0 m)
+    in
     let ty = newty (Tarrow(l, ty1, cty2.ctyp_type, Cok)) in
     ctyp (Ttyp_arrow (l, cty1, cty2)) ty
   | Ptyp_tuple stl ->

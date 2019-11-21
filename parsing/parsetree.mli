@@ -90,10 +90,11 @@ and core_type_desc =
         (*  _ *)
   | Ptyp_var of string
         (* 'a *)
-  | Ptyp_arrow of uninhabited arg_label * core_type * core_type
+  | Ptyp_arrow of string arg_label * core_type * core_type
         (* T1 -> T2       Simple
            ~l:T1 -> T2    Labelled
            ?l:T1 -> T2    Optional
+           {M : T1} -> T2 Module
          *)
   | Ptyp_tuple of core_type list
         (* T1 * ... * Tn
@@ -550,10 +551,11 @@ and class_type_desc =
            ['a1, ..., 'an] c *)
   | Pcty_signature of class_signature
         (* object ... end *)
-  | Pcty_arrow of uninhabited arg_label * core_type * class_type
+  | Pcty_arrow of string arg_label * core_type * class_type
         (* T -> CT       Simple
            ~l:T -> CT    Labelled l
            ?l:T -> CT    Optional l
+           {M : T} -> CT Module M
          *)
   | Pcty_extension of extension
         (* [%id] *)

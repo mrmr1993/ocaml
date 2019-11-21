@@ -474,7 +474,7 @@ let string_of_label = function
     Nolabel -> ""
   | Labelled s -> s
   | Optional s -> "?"^s
-  | Asttypes.Module (_ : uninhabited) -> .
+  | Asttypes.Module m -> Ident.name m
 
 let visited = ref []
 let rec raw_type ppf ty =
@@ -938,6 +938,16 @@ let rec tree_of_typexp sch ty =
         let non_gen = is_non_gen sch ty in
         let name_gen = if non_gen then new_weak_name ty else new_name in
         Otyp_var (non_gen, name_of_type name_gen ty)
+    | Tarrow (Module m, {desc= Tpackage (p, n, tyl); _}, ty2, _) ->
+        let n =
+          List.map (fun li -> String.concat "." (Longident.flatten li)) n
+        in
+        Otyp_module_arrow
+          ( ident_name Module m
+          , tree_of_path Module_type p
+          , n
+          , tree_of_typlist sch tyl
+          , tree_of_typexp sch ty2 )
     | Tarrow(l, ty1, ty2, _) ->
         let pr_arrow l ty1 ty2 =
           let lab =

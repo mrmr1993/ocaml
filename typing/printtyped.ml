@@ -145,11 +145,11 @@ let option i f ppf x =
 
 let longident i ppf li = line i ppf "%a\n" fmt_longident li;;
 let string i ppf s = line i ppf "\"%s\"\n" s;;
-let arg_label i ppf = function
+let arg_label pp_module i ppf = function
   | Nolabel -> line i ppf "Nolabel\n"
   | Optional s -> line i ppf "Optional \"%s\"\n" s
   | Labelled s -> line i ppf "Labelled \"%s\"\n" s
-  | Module (_ : uninhabited) -> .
+  | Module m -> line i ppf "Module \"%a\"\n" pp_module m
 ;;
 
 let record_representation i ppf = let open Types in function
@@ -179,7 +179,7 @@ let rec core_type i ppf x =
   | Ttyp_var (s) -> line i ppf "Ttyp_var %s\n" s;
   | Ttyp_arrow (l, ct1, ct2) ->
       line i ppf "Ttyp_arrow\n";
-      arg_label i ppf l;
+      arg_label fmt_ident i ppf l;
       core_type i ppf ct1;
       core_type i ppf ct2;
   | Ttyp_tuple l ->
@@ -321,7 +321,7 @@ and expression i ppf x =
       expression i ppf e;
   | Texp_function { arg_label = p; param = _; cases; partial = _; } ->
       line i ppf "Texp_function\n";
-      arg_label i ppf p;
+      arg_label (fun _ -> function (_ : uninhabited) -> .) i ppf p;
       list i case ppf cases;
   | Texp_apply (e, l) ->
       line i ppf "Texp_apply\n";
@@ -526,7 +526,7 @@ and class_type i ppf x =
       class_signature i ppf cs;
   | Tcty_arrow (l, co, cl) ->
       line i ppf "Tcty_arrow\n";
-      arg_label i ppf l;
+      arg_label fmt_ident i ppf l;
       core_type i ppf co;
       class_type i ppf cl;
   | Tcty_open (o, e) ->
@@ -597,7 +597,7 @@ and class_expr i ppf x =
       class_structure i ppf cs;
   | Tcl_fun (l, p, _, ce, _) ->
       line i ppf "Tcl_fun\n";
-      arg_label i ppf l;
+      arg_label (fun _ -> function (_ : uninhabited) -> .) i ppf l;
       pattern i ppf p;
       class_expr i ppf ce
   | Tcl_apply (ce, l) ->
@@ -917,7 +917,7 @@ and record_field i ppf = function
 
 and label_x_expression i ppf (l, e) =
   line i ppf "<arg>\n";
-  arg_label (i+1) ppf l;
+  arg_label (fun _ -> function (_ : uninhabited) -> .) (i+1) ppf l;
   (match e with None -> () | Some e -> expression (i+1) ppf e)
 
 and ident_x_expression_def i ppf (l, e) =

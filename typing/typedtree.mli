@@ -571,7 +571,7 @@ and core_type =
 and core_type_desc =
     Ttyp_any
   | Ttyp_var of string
-  | Ttyp_arrow of uninhabited arg_label * core_type * core_type
+  | Ttyp_arrow of Ident.t arg_label * core_type * core_type
   | Ttyp_tuple of core_type list
   | Ttyp_constr of Path.t * Longident.t loc * core_type list
   | Ttyp_object of object_field list * closed_flag
@@ -706,7 +706,7 @@ and class_type =
 and class_type_desc =
     Tcty_constr of Path.t * Longident.t loc * core_type list
   | Tcty_signature of class_signature
-  | Tcty_arrow of uninhabited arg_label * core_type * class_type
+  | Tcty_arrow of Ident.t arg_label * core_type * class_type
   | Tcty_open of open_description * class_type
 
 and class_signature = {

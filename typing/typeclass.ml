@@ -98,6 +98,12 @@ exception Error_forward of Location.error
 
 open Typedtree
 
+let map_arg_label ~f = function
+  | Nolabel -> Nolabel
+  | Labelled l -> Labelled l
+  | Optional l -> Optional l
+  | Module m -> Module (f m)
+
 let type_open_descr :
   (?used_slot:bool ref -> Env.t -> Parsetree.open_description
    -> open_description * Env.t) ref =
@@ -566,6 +572,13 @@ and class_type_aux env scty =
         then Ctype.newty (Tconstr(Predef.path_option,[ty], ref Mnil))
         else ty in
       let clty = class_type env scty in
+      let l =
+        match l with
+        | Nolabel -> Nolabel
+        | Labelled l -> Labelled l
+        | Optional l -> Optional l
+        | Module l -> Module (Ident.create_scoped ~scope:0 l)
+      in
       let typ = Cty_arrow (l, ty, clty.cltyp_type) in
       cltyp (Tcty_arrow (l, cty, clty)) typ
 
@@ -1057,6 +1070,13 @@ and class_expr_aux cl_num val_env met_env scl =
       if Btype.is_optional l && not_function cl.cl_type then
         Location.prerr_warning pat.pat_loc
           Warnings.Unerasable_optional_argument;
+      let l =
+        match l with
+        | Nolabel -> Nolabel
+        | Labelled l -> Labelled l
+        | Optional l -> Optional l
+        | Module _ -> .
+      in
       rc {cl_desc = Tcl_fun (l, pat, pv, cl, partial);
           cl_loc = scl.pcl_loc;
           cl_type = Cty_arrow
@@ -1094,6 +1114,16 @@ and class_expr_aux cl_num val_env met_env scl =
           true
         end
       in
+      let arg_label_there =
+        map_arg_label ~f:(function (_ : uninhabited) -> .)
+      in
+      let arg_label_back =
+        map_arg_label ~f:(function _ -> (assert false : uninhabited))
+      in
+      let arg_label_pair_there (lbl, x) = arg_label_there lbl, x in
+      let arg_label_pair_back (lbl, x) = arg_label_back lbl, x in
+      let arg_labels_there = List.map arg_label_pair_there in
+      let arg_labels_back = List.map arg_label_pair_back in
       let rec type_args args omitted ty_fun ty_fun0 sargs more_sargs =
         match ty_fun, ty_fun0 with
         | Cty_arrow (l, ty, ty_fun), Cty_arrow (_, ty0, ty_fun0)
@@ -1106,7 +1136,17 @@ and class_expr_aux cl_num val_env met_env scl =
                   (l', sarg0)::_, _ ->
                     raise(Error(sarg0.pexp_loc, val_env, Apply_wrong_label l'))
                 | _, (l', sarg0)::more_sargs ->
-                    if l <> l' && l' <> Nolabel then
+                    let err =
+                      match l, l' with
+                      | Module _, Module (_ : uninhabited) -> .
+                      | Module _, _ ->
+                          true
+                      | _, Nolabel -> false
+                      | Labelled l, Labelled l'
+                      | Optional l, Optional l' -> l <> l'
+                      | _ -> true
+                    in
+                    if err then
                       raise(Error(sarg0.pexp_loc, val_env,
                                   Apply_wrong_label l'))
                     else ([], more_sargs,
@@ -1117,12 +1157,12 @@ and class_expr_aux cl_num val_env met_env scl =
                 let (l', sarg0, sargs, more_sargs) =
                   try
                     let (l', sarg0, sargs1, sargs2) =
-                      Btype.extract_label name sargs
-                    in (l', sarg0, sargs1 @ sargs2, more_sargs)
+                      Btype.extract_label name (arg_labels_there sargs)
+                    in (l', sarg0, arg_labels_back (sargs1 @ sargs2), more_sargs)
                   with Not_found ->
                     let (l', sarg0, sargs1, sargs2) =
-                      Btype.extract_label name more_sargs
-                    in (l', sarg0, sargs @ sargs1, sargs2)
+                      Btype.extract_label name (arg_labels_there more_sargs)
+                    in (l', sarg0, sargs @ arg_labels_back sargs1, arg_labels_back sargs2)
                 in
                 if not optional && Btype.is_optional l' then
                   Location.prerr_warning sarg0.pexp_loc
@@ -1144,8 +1184,8 @@ and class_expr_aux cl_num val_env met_env scl =
                   Some (option_none val_env ty0 Location.none)
                 else None
             in
-            let omitted = if arg = None then (l,ty0) :: omitted else omitted in
-            type_args ((l,arg)::args) omitted ty_fun ty_fun0
+            let omitted = if arg = None then (arg_label_back l,ty0) :: omitted else omitted in
+            type_args ((arg_label_back l,arg)::args) omitted ty_fun ty_fun0
               sargs more_sargs
         | _ ->
             match sargs @ more_sargs with
@@ -1157,7 +1197,7 @@ and class_expr_aux cl_num val_env met_env scl =
             | [] ->
                 (List.rev args,
                  List.fold_left
-                   (fun ty_fun (l,ty) -> Cty_arrow(l,ty,ty_fun))
+                   (fun ty_fun (l,ty) -> Cty_arrow(arg_label_there l,ty,ty_fun))
                    ty_fun0 omitted)
       in
       let (args, cty) =
@@ -1273,6 +1313,13 @@ let rec approx_declaration cl =
       let arg =
         if Btype.is_optional l then Ctype.instance var_option
         else Ctype.newvar () in
+      let l =
+        match l with
+        | Nolabel -> Nolabel
+        | Labelled l -> Labelled l
+        | Optional l -> Optional l
+        | Module (_ : uninhabited) -> .
+      in
       Ctype.newty (Tarrow (l, arg, approx_declaration cl, Cok))
   | Pcl_let (_, _, cl) ->
       approx_declaration cl
@@ -1286,6 +1333,13 @@ let rec approx_description ct =
       let arg =
         if Btype.is_optional l then Ctype.instance var_option
         else Ctype.newvar () in
+      let l =
+        match l with
+        | Nolabel -> Nolabel
+        | Labelled l -> Labelled l
+        | Optional l -> Optional l
+        | Module m -> Module (Ident.create_scoped ~scope:0 m)
+      in
       Ctype.newty (Tarrow (l, arg, approx_description ct, Cok))
   | _ -> Ctype.newvar ()
 

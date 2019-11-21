@@ -1770,7 +1770,14 @@ module Analyser =
       | (Parsetree.Pcty_arrow (parse_label, _, pclass_type), Types.Cty_arrow (label, type_expr, class_type)) ->
           (* label = string. In signature, there is no parameter names inside tuples *)
           (* if label = "", no label . Here we have the information to determine if a label is explicit or not. *)
-          if parse_label = label then
+          let labels_equal =
+            match parse_label, label with
+            | Nolabel, Nolabel -> true
+            | Labelled l, Labelled l' | Optional l, Optional l' -> l = l'
+            | Module l, Module l' -> l = Ident.name l'
+            | _ -> false
+          in
+          if labels_equal then
             (
              let new_param = Simple_name
                  {

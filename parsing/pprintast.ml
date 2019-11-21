@@ -285,7 +285,14 @@ and type_with_label ctxt f (label, c) =
   | Nolabel    -> core_type1 ctxt f c (* otherwise parenthesize *)
   | Labelled s -> pp f "%s:%a" s (core_type1 ctxt) c
   | Optional s -> pp f "?%s:%a" s (core_type1 ctxt) c
-  | Module (_ : uninhabited) -> .
+  | Module s ->
+      begin match c.ptyp_desc with
+      | Ptyp_package (lid, cstrs) ->
+          pp f "{%s@ :@ @[<hov2>%a@]}" s (package_type ctxt) (lid, cstrs)
+      | _ ->
+          (* TODO: This probably shouldn't be allowed.. *)
+          pp f "%s:%a" s (core_type1 ctxt) c
+      end
 
 and core_type ctxt f x =
   if x.ptyp_attributes <> [] then begin
@@ -378,15 +385,18 @@ and core_type1 ctxt f x =
           (list (core_type ctxt) ~sep:"," ~first:"(" ~last:")") l
           longident_loc li
     | Ptyp_package (lid, cstrs) ->
-        let aux f (s, ct) =
-          pp f "type %a@ =@ %a" longident_loc s (core_type ctxt) ct  in
-        (match cstrs with
-         |[] -> pp f "@[<hov2>(module@ %a)@]" longident_loc lid
-         |_ ->
-             pp f "@[<hov2>(module@ %a@ with@ %a)@]" longident_loc lid
-               (list aux  ~sep:"@ and@ ")  cstrs)
+        pp f "@[<hov2>(module@ %a)@]" (package_type ctxt) (lid, cstrs)
     | Ptyp_extension e -> extension ctxt f e
     | _ -> paren true (core_type ctxt) f x
+
+and package_type ctxt f (lid, cstrs) =
+  let aux f (s, ct) =
+    pp f "type %a@ =@ %a" longident_loc s (core_type ctxt) ct  in
+  (match cstrs with
+   |[] -> longident_loc f lid
+   |_ ->
+       pp f "%a@ with@ %a" longident_loc lid
+         (list aux  ~sep:"@ and@ ")  cstrs)
 
 (********************pattern********************)
 (* be cautious when use [pattern], [pattern1] is preferred *)

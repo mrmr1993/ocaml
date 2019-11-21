@@ -697,6 +697,12 @@ let class_expr sub cexpr =
   in
   Cl.mk ~loc ~attrs desc
 
+let label = function
+  | Nolabel -> Nolabel
+  | Labelled l -> Labelled l
+  | Optional l -> Optional l
+  | Module m -> Module (Ident.name m)
+
 let class_type sub ct =
   let loc = sub.location sub ct.cltyp_loc in
   let attrs = sub.attributes sub ct.cltyp_attributes in
@@ -704,8 +710,8 @@ let class_type sub ct =
       Tcty_signature csg -> Pcty_signature (sub.class_signature sub csg)
     | Tcty_constr (_path, lid, list) ->
         Pcty_constr (map_loc sub lid, List.map (sub.typ sub) list)
-    | Tcty_arrow (label, ct, cl) ->
-        Pcty_arrow (label, sub.typ sub ct, sub.class_type sub cl)
+    | Tcty_arrow (lbl, ct, cl) ->
+        Pcty_arrow (label lbl, sub.typ sub ct, sub.class_type sub cl)
     | Tcty_open (od, e) ->
         Pcty_open (sub.open_description sub od, sub.class_type sub e)
   in
@@ -738,8 +744,8 @@ let core_type sub ct =
   let desc = match ct.ctyp_desc with
       Ttyp_any -> Ptyp_any
     | Ttyp_var s -> Ptyp_var s
-    | Ttyp_arrow (label, ct1, ct2) ->
-        Ptyp_arrow (label, sub.typ sub ct1, sub.typ sub ct2)
+    | Ttyp_arrow (lbl, ct1, ct2) ->
+        Ptyp_arrow (label lbl, sub.typ sub ct1, sub.typ sub ct2)
     | Ttyp_tuple list -> Ptyp_tuple (List.map (sub.typ sub) list)
     | Ttyp_constr (_path, lid, list) ->
         Ptyp_constr (map_loc sub lid,
