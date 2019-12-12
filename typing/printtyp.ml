@@ -938,7 +938,12 @@ let rec tree_of_typexp sch ty =
         let non_gen = is_non_gen sch ty in
         let name_gen = if non_gen then new_weak_name ty else new_name in
         Otyp_var (non_gen, name_of_type name_gen ty)
-    | Tarrow (Module m, {desc= Tpackage (p, n, tyl); _}, ty2, _) ->
+    | Tarrow (Module m, ty1, ty2, _) ->
+        let p, n, tyl =
+          match (repr ty1).desc with
+          | Tpackage (p, n, tyl) -> (p, n, tyl)
+          | _ -> assert false
+        in
         let n =
           List.map (fun li -> String.concat "." (Longident.flatten li)) n
         in
