@@ -31,6 +31,7 @@ val print_with_scope : Format.formatter -> t -> unit
 
 val create_scoped: scope:int -> string -> t
 val create_local: string -> t
+val create_type_module: string -> t
 val create_persistent: string -> t
 val create_predef: string -> t
 
@@ -54,8 +55,11 @@ val compare: t -> t -> int
 
 val global: t -> bool
 val is_predef: t -> bool
+val is_type_module: t -> bool
 
 val scope: t -> int
+
+val set_type_module_scope: int -> t -> unit
 
 val lowest_scope : int
 val highest_scope: int

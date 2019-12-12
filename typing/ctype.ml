@@ -759,6 +759,9 @@ let rec generalize_spine ty =
 let forward_try_expand_once = (* Forward declaration *)
   ref (fun _env _ty -> raise Cannot_expand)
 
+let modtype_of_package = ref (fun _ _ _ _ -> assert false)
+let modtype_includes = ref (fun _ _ _ -> assert false)
+
 (*
    Lower the levels of a type (assume [level] is not
    [generic_level]).
@@ -781,7 +784,7 @@ let rec normalize_package_path env p =
       | _ -> p
 
 let check_scope_escape env level ty =
-  let rec loop ty =
+  let rec loop env level ty =
     let ty = repr ty in
     if ty.level >= lowest_level then begin
       ty.level <- pivot_level - ty.level;
@@ -798,12 +801,24 @@ let check_scope_escape env level ty =
           let p' = normalize_package_path env p in
           if Path.same p p' then raise Trace.(Unify [escape (Module_type p)]);
           aux { ty with desc = Tpackage (p', nl, tl) }
+      | Tarrow (Module m, t, u, _) ->
+          loop env level t;
+          let mty =
+            match (repr t).desc with
+            | Tpackage (p, n, tl) -> !modtype_of_package env p n tl
+            | _ -> assert false
+          in
+          let scope = Ident.scope m in
+          set_type_module_scope m (level+1);
+          let env = Env.add_module m Mp_present mty env in
+          loop env (level+1) u;
+          set_type_module_scope m scope
       | _ ->
-        iter_type_expr loop ty
+        iter_type_expr (loop env level) ty
       end;
     end
   and aux ty =
-    loop ty;
+    loop env level ty;
     unmark_type ty
   in
   try aux ty;
@@ -876,6 +891,19 @@ let rec update_level env level expand ty =
     | Tfield(lab, _, ty1, _)
       when lab = dummy_method && (repr ty1).level > level ->
         raise Trace.(Unify [escape Self])
+    | Tarrow (Module m, t, u, _) ->
+        set_level ty level;
+        update_level env level expand t;
+        let mty =
+          match (repr t).desc with
+          | Tpackage (p, n, tl) -> !modtype_of_package env p n tl
+          | _ -> assert false
+        in
+        let scope = Ident.scope m in
+        set_type_module_scope m (level+1);
+        let env = Env.add_module m Mp_present mty env in
+        update_level env (level+1) expand u;
+        set_type_module_scope m scope
     | _ ->
         set_level ty level;
         (* XXX what about abbreviations in Tconstr ? *)
@@ -1863,7 +1891,7 @@ let rec unify_univar t1 t2 = function
 (* that's way too expensive. Must do some kind of caching *)
 let occur_univar env ty =
   let visited = ref TypeMap.empty in
-  let rec occur_rec bound ty =
+  let rec occur_rec env bound ty =
     let ty = repr ty in
     if ty.level >= lowest_level &&
       if TypeSet.is_empty bound then
@@ -1884,7 +1912,17 @@ let occur_univar env ty =
             raise Trace.(Unify [escape (Univ ty)])
       | Tpoly (ty, tyl) ->
           let bound = List.fold_right TypeSet.add (List.map repr tyl) bound in
-          occur_rec bound  ty
+          occur_rec env bound  ty
+      | Tconstr (p, _, _)
+          when List.exists (fun id ->
+              if Ident.is_type_module id then
+                try
+                  ignore (Env.find_module (Path.Pident id) env);
+                  Env.type_local_module_in_scope id env
+                with Not_found -> true
+              else false)
+            (Path.heads p) ->
+          raise Trace.(Unify [escape (Constructor p)])
       | Tconstr (_, [], _) -> ()
       | Tconstr (p, tl, _) ->
           begin try
@@ -1892,15 +1930,28 @@ let occur_univar env ty =
             List.iter2
               (fun t v ->
                 if Variance.(mem May_pos v || mem May_neg v)
-                then occur_rec bound t)
+                then occur_rec env bound t)
               tl td.type_variance
           with Not_found ->
-            List.iter (occur_rec bound) tl
+            List.iter (occur_rec env bound) tl
           end
-      | _ -> iter_type_expr (occur_rec bound) ty
+      | Tarrow (Module m, t, u, _) ->
+          occur_rec env bound t;
+          let mty =
+            match (repr t).desc with
+            | Tpackage (p, n, tl) -> !modtype_of_package env p n tl
+            | _ -> assert false
+          in
+          let scope = Ident.scope m in
+          set_type_module_scope m (ty.level+1);
+          let env = Env.add_module m Mp_present mty env in
+          let env = Env.unset_type_local_module m env in
+          occur_rec env bound u;
+          set_type_module_scope m scope
+      | _ -> iter_type_expr (occur_rec env bound) ty
   in
   Misc.try_finally (fun () ->
-      occur_rec TypeSet.empty ty
+      occur_rec env TypeSet.empty ty
     )
     ~always:(fun () -> unmark_type ty)
 
@@ -2620,7 +2671,33 @@ and unify3 env t1 t1' t2 t2' =
     end;
     try
       begin match (d1, d2) with
-        (Tarrow (l1, t1, u1, c1), Tarrow (l2, t2, u2, c2)) when l1 = l2 ||
+        (Tarrow (Module m1, t1, u1, c1), Tarrow (Module m2, t2, u2, c2)) ->
+          ignore (m1, m2);
+          unify env t1 t2;
+          let u2' =
+            let m2_subst = Subst.add_module m2 (Pident m1) Subst.identity in
+            Subst.type_expr m2_subst u2
+          in
+          link_type u2 u2';
+          set_type_desc t2' (Tarrow (Module m1, t2, u2', c2));
+          let mty1 =
+            match (repr t1).desc with
+            | Tpackage (p, n, tl) -> !modtype_of_package !env p n tl
+            | _ -> assert false
+          in
+          let env_new = ref !env in
+          env_new := Env.add_type_local_module m1 Mp_present mty1 !env_new;
+          env_new :=
+            Env.add_module m2 Mp_absent (Mty_alias (Pident m1)) !env_new;
+          ignore (mty1);
+          unify env_new u1 u2;
+          env := Env.copy_local ~from:!env_new !env;
+          begin match commu_repr c1, commu_repr c2 with
+            Clink r, c2 -> set_commu r c2
+          | c1, Clink r -> set_commu r c1
+          | _ -> ()
+          end
+      | (Tarrow (l1, t1, u1, c1), Tarrow (l2, t2, u2, c2)) when l1 = l2 ||
         (!Clflags.classic || !umode = Pattern) &&
         not (is_optional l1 || is_optional l2) ->
           unify  env t1 t2; unify env  u1 u2;

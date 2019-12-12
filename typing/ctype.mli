@@ -368,5 +368,9 @@ val maybe_pointer_type : Env.t -> type_expr -> bool
 val package_subtype :
     (Env.t -> Path.t -> Longident.t list -> type_expr list ->
       Path.t -> Longident.t list -> type_expr list -> bool) ref
+val modtype_of_package :
+    (Env.t -> Path.t -> Longident.t list -> type_expr list -> module_type) ref
+val modtype_includes :
+    (Env.t -> module_type -> module_type -> bool) ref
 
 val mcomp : Env.t -> type_expr -> type_expr -> unit

@@ -76,6 +76,7 @@ type change =
   | Ccommu of commutable ref * commutable
   | Cuniv of type_expr option ref * type_expr option
   | Ctypeset of TypeSet.t ref * TypeSet.t
+  | Cidentscope of Ident.t * int
 
 type changes =
     Change of change * changes ref
@@ -718,6 +719,7 @@ let undo_change = function
   | Ccommu (r, v) -> r := v
   | Cuniv  (r, v) -> r := v
   | Ctypeset (r, v) -> r := v
+  | Cidentscope (id, scope) -> Ident.set_type_module_scope scope id
 
 type snapshot = changes ref * int
 let last_snapshot = ref 0
@@ -769,6 +771,9 @@ let set_commu rc c =
   log_change (Ccommu (rc, !rc)); rc := c
 let set_typeset rs s =
   log_change (Ctypeset (rs, !rs)); rs := s
+let set_type_module_scope id scope =
+  log_change (Cidentscope (id, scope));
+  Ident.set_type_module_scope scope id
 
 let snapshot () =
   let old = !last_snapshot in

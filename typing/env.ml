@@ -399,6 +399,7 @@ type t = {
   summary: summary;
   local_constraints: type_declaration Path.Map.t;
   flags: int;
+  type_local_modules: unit Ident.tbl;
 }
 
 and module_declaration_lazy =
@@ -587,6 +588,7 @@ let empty = {
   summary = Env_empty; local_constraints = Path.Map.empty;
   flags = 0;
   functor_args = Ident.empty;
+  type_local_modules = Ident.empty;
  }
 
 let in_signature b env =
@@ -930,6 +932,10 @@ let find_ident_constructor id env =
 
 let find_ident_label id env =
   TycompTbl.find_same id env.labels
+
+let type_local_module_in_scope id env =
+  try Ident.find_same id env.type_local_modules; true
+  with Not_found -> false
 
 let type_of_cstr path = function
   | {cstr_inlined = Some decl; _} ->
@@ -1838,10 +1844,18 @@ and add_cltype id ty env =
 let add_module ?arg id presence mty env =
   add_module_declaration ~check:false ?arg id presence (md mty) env
 
+let add_type_local_module ?arg id presence mty env =
+  let env = add_module ?arg id presence mty env in
+  { env with
+    type_local_modules= Ident.add id () env.type_local_modules }
+
+let unset_type_local_module id env =
+  { env with
+    type_local_modules= Ident.remove id env.type_local_modules }
+
 let add_local_type path info env =
   { env with
     local_constraints = Path.Map.add path info env.local_constraints }
-
 
 (* Insertion of bindings by name *)
 

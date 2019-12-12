@@ -197,6 +197,20 @@ and transl_type_aux env policy styp =
       end
     in
     ctyp (Ttyp_var name) ty
+  | Ptyp_arrow(Module m, st1, st2) ->
+    let cty1 = transl_type env policy st1 in
+    let mty =
+      match cty1.ctyp_desc with
+      | Ttyp_package {pack_type; _} -> pack_type
+      | _ -> assert false
+    in
+    let m = Ident.create_type_module m in
+    let env = Env.add_module m Mp_present mty env in
+    begin_def();
+    let cty2 = transl_type env policy st2 in
+    end_def();
+    let ty = newty (Tarrow(Module m, cty1.ctyp_type, cty2.ctyp_type, Cok)) in
+    ctyp (Ttyp_arrow (Module m, cty1, cty2)) ty
   | Ptyp_arrow(l, st1, st2) ->
     let cty1 = transl_type env policy st1 in
     let cty2 = transl_type env policy st2 in
@@ -210,7 +224,7 @@ and transl_type_aux env policy styp =
       | Nolabel -> Nolabel
       | Labelled l -> Labelled l
       | Optional l -> Optional l
-      | Module m -> Module (Ident.create_scoped ~scope:0 m)
+      | Module m -> Module (Ident.create_local m)
     in
     let ty = newty (Tarrow(l, ty1, cty2.ctyp_type, Cok)) in
     ctyp (Ttyp_arrow (l, cty1, cty2)) ty

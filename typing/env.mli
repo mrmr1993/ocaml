@@ -87,6 +87,9 @@ val find_cltype: Path.t -> t -> class_type_declaration
 val find_ident_constructor: Ident.t -> t -> constructor_description
 val find_ident_label: Ident.t -> t -> label_description
 
+val type_local_module_in_scope: Ident.t -> t -> bool
+val unset_type_local_module: Ident.t -> t -> t
+
 val find_type_expansion:
     Path.t -> t -> type_expr list * type_expr * int
 val find_type_expansion_opt:
@@ -268,6 +271,8 @@ val add_module:
   ?arg:bool -> Ident.t -> module_presence -> module_type -> t -> t
 val add_module_declaration: ?arg:bool -> check:bool -> Ident.t ->
   module_presence -> module_declaration -> t -> t
+val add_type_local_module:
+  ?arg:bool -> Ident.t -> module_presence -> module_type -> t -> t
 val add_modtype: Ident.t -> modtype_declaration -> t -> t
 val add_class: Ident.t -> class_declaration -> t -> t
 val add_cltype: Ident.t -> class_type_declaration -> t -> t

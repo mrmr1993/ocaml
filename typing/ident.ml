@@ -23,6 +23,7 @@ type t =
   | Predef of { name: string; stamp: int }
       (* the stamp is here only for fast comparison, but the name of
          predefined identifiers is always unique. *)
+  | Type_module of { name: string; stamp: int; mutable scope: int }
 
 (* A stamp of 0 denotes a persistent identifier *)
 
@@ -37,6 +38,10 @@ let create_local s =
   incr currentstamp;
   Local { name = s; stamp = !currentstamp }
 
+let create_type_module s =
+  incr currentstamp;
+  Type_module { name = s; stamp = !currentstamp; scope= highest_scope }
+
 let create_predef s =
   incr predefstamp;
   Predef { name = s; stamp = !predefstamp }
@@ -48,7 +53,8 @@ let name = function
   | Local { name; _ }
   | Scoped { name; _ }
   | Global name
-  | Predef { name; _ } -> name
+  | Predef { name; _ }
+  | Type_module { name; _ } -> name
 
 let rename = function
   | Local { name; stamp = _ }
@@ -60,7 +66,8 @@ let rename = function
 
 let unique_name = function
   | Local { name; stamp }
-  | Scoped { name; stamp } -> name ^ "_" ^ Int.to_string stamp
+  | Scoped { name; stamp }
+  | Type_module { name; stamp } -> name ^ "_" ^ Int.to_string stamp
   | Global name ->
       (* we're adding a fake stamp, because someone could have named his unit
          [Foo_123] and since we're using unique_name to produce symbol names,
@@ -73,7 +80,8 @@ let unique_name = function
 
 let unique_toplevel_name = function
   | Local { name; stamp }
-  | Scoped { name; stamp } -> name ^ "/" ^ Int.to_string stamp
+  | Scoped { name; stamp }
+  | Type_module { name; stamp } -> name ^ "/" ^ Int.to_string stamp
   | Global name
   | Predef { name; _ } -> name
 
@@ -85,6 +93,7 @@ let equal i1 i2 =
   match i1, i2 with
   | Local { name = name1; _ }, Local { name = name2; _ }
   | Scoped { name = name1; _ }, Scoped { name = name2; _ }
+  | Type_module { name = name1; _ }, Type_module { name = name2; _ }
   | Global name1, Global name2 ->
       name1 = name2
   | Predef { stamp = s1; _ }, Predef { stamp = s2 } ->
@@ -103,13 +112,18 @@ let compare i1 i2 = Stdlib.compare i1 i2
 
 let stamp = function
   | Local { stamp; _ }
-  | Scoped { stamp; _ } -> stamp
+  | Scoped { stamp; _ }
+  | Type_module { stamp; _ } -> stamp
   | _ -> 0
 
 let scope = function
-  | Scoped { scope; _ } -> scope
+  | Scoped { scope; _ } | Type_module { scope; _ } -> scope
   | Local _ -> highest_scope
   | Global _ | Predef _ -> lowest_scope
+
+let set_type_module_scope scope = function
+  | Type_module desc -> desc.scope <- scope
+  | id -> Misc.fatal_errorf "Ident.set_type_module_scope %s" (name id)
 
 let reinit_level = ref (-1)
 
@@ -120,12 +134,17 @@ let reinit () =
 
 let global = function
   | Local _
-  | Scoped _ -> false
+  | Scoped _
+  | Type_module _ -> false
   | Global _
   | Predef _ -> true
 
 let is_predef = function
   | Predef _ -> true
+  | _ -> false
+
+let is_type_module = function
+  | Type_module _ -> true
   | _ -> false
 
 let print ~with_scope ppf =
@@ -138,7 +157,8 @@ let print ~with_scope ppf =
   | Local { name; stamp = n } ->
       fprintf ppf "%s%s" name
         (if !Clflags.unique_ids then sprintf "/%i" n else "")
-  | Scoped { name; stamp = n; scope } ->
+  | Scoped { name; stamp = n; scope }
+  | Type_module { name; stamp = n; scope } ->
       fprintf ppf "%s%s%s" name
         (if !Clflags.unique_ids then sprintf "/%i" n else "")
         (if with_scope then sprintf "[%i]" scope else "")
@@ -335,6 +355,12 @@ let compare x y =
       else compare x.name y.name
   | Scoped _, _ -> 1
   | _, Scoped _ -> (-1)
+  | Type_module x, Type_module y ->
+      let c = x.stamp - y.stamp in
+      if c <> 0 then c
+      else compare x.name y.name
+  | Type_module _, _ -> 1
+  | _, Type_module _ -> (-1)
   | Global x, Global y -> compare x y
   | Global _, _ -> 1
   | _, Global _ -> (-1)

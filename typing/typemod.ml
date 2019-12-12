@@ -1831,6 +1831,23 @@ let package_subtype env p1 nl1 tl1 p2 nl2 tl2 =
 
 let () = Ctype.package_subtype := package_subtype
 
+let () =
+  let mkmty env p nl tl =
+    let ntl =
+      List.filter (fun (_n,t) -> Ctype.free_variables t = [])
+        (List.combine nl tl) in
+    let (nl, tl) = List.split ntl in
+    modtype_of_package env Location.none p nl tl
+  in
+  Ctype.modtype_of_package := mkmty
+
+let () =
+  let modtype_includes env mty1 mty2 =
+    try Includemod.modtypes ~loc:Location.none env mty1 mty2 = Tcoerce_none
+    with Includemod.Error _msg -> false
+  in
+  Ctype.modtype_includes := modtype_includes
+
 let wrap_constraint env mark arg mty explicit =
   let mark = if mark then Includemod.Mark_both else Includemod.Mark_neither in
   let coercion =
