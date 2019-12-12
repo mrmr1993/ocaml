@@ -2689,8 +2689,11 @@ and unify3 env t1 t1' t2 t2' =
           env_new := Env.add_type_local_module m1 Mp_present mty1 !env_new;
           env_new :=
             Env.add_module m2 Mp_absent (Mty_alias (Pident m1)) !env_new;
-          ignore (mty1);
+          let scope = Ident.scope m1 in
+          let level = min (repr u1).level (repr u2).level in
+          set_type_module_scope m1 level;
           unify env_new u1 u2;
+          set_type_module_scope m1 scope;
           env := Env.copy_local ~from:!env_new !env;
           begin match commu_repr c1, commu_repr c2 with
             Clink r, c2 -> set_commu r c2
