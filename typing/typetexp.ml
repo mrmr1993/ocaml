@@ -225,7 +225,7 @@ and transl_type_aux env policy styp =
       | Nolabel -> Nolabel
       | Labelled l -> Labelled l
       | Optional l -> Optional l
-      | Module m -> Module (Ident.create_local m)
+      | Module m -> Module (Ident.create_type_module m)
     in
     let ty = newty (Tarrow(l, ty1, cty2.ctyp_type, Cok)) in
     ctyp (Ttyp_arrow (l, cty1, cty2)) ty
