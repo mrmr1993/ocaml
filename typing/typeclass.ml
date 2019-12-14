@@ -69,7 +69,7 @@ type error =
   | Field_type_mismatch of string * string * Ctype.Unification_trace.t
   | Structure_expected of class_type
   | Cannot_apply of class_type
-  | Apply_wrong_label of uninhabited arg_label
+  | Apply_wrong_label : _ arg_label -> error
   | Pattern_type_clash of type_expr
   | Repeated_parameter
   | Unbound_class_2 of Longident.t
@@ -572,13 +572,7 @@ and class_type_aux env scty =
         then Ctype.newty (Tconstr(Predef.path_option,[ty], ref Mnil))
         else ty in
       let clty = class_type env scty in
-      let l =
-        match l with
-        | Nolabel -> Nolabel
-        | Labelled l -> Labelled l
-        | Optional l -> Optional l
-        | Module l -> Module (Ident.create_scoped ~scope:0 l)
-      in
+      let l = map_arg_label ~f:Ident.create_type_module l in
       let typ = Cty_arrow (l, ty, clty.cltyp_type) in
       cltyp (Tcty_arrow (l, cty, clty)) typ
 
@@ -1114,18 +1108,47 @@ and class_expr_aux cl_num val_env met_env scl =
           true
         end
       in
-      let arg_label_there =
-        map_arg_label ~f:(function (_ : uninhabited) -> .)
+      let sargs =
+        List.map
+          (fun (lbl, arg) ->
+            let lbl = map_arg_label lbl ~f:(fun m ->
+              let (path, _) = Env.lookup_module ~loc:m.loc m.txt val_env in
+              (path, m))
+            in
+            (lbl, arg))
+          sargs
       in
-      let arg_label_back =
-        map_arg_label ~f:(function _ -> (assert false : uninhabited))
-      in
-      let arg_label_pair_there (lbl, x) = arg_label_there lbl, x in
-      let arg_label_pair_back (lbl, x) = arg_label_back lbl, x in
-      let arg_labels_there = List.map arg_label_pair_there in
-      let arg_labels_back = List.map arg_label_pair_back in
       let rec type_args args omitted ty_fun ty_fun0 sargs more_sargs =
         match ty_fun, ty_fun0 with
+        | Cty_arrow (Module m, ty, ty_fun), Cty_arrow (_, ty0, ty_fun0)
+          when sargs <> [] || more_sargs <> [] ->
+            let sargs, more_sargs, path, l', arg =
+              (* In classic mode, omitted = [] *)
+              match sargs, more_sargs with
+                (l', sarg0) :: _, _ when ignore_labels ->
+                  raise(Error(sarg0.pexp_loc, val_env,
+                              Apply_wrong_label l'))
+              | (Module (path, _) as l', sarg0) :: sargs, _ ->
+                  (sargs, more_sargs, path, l',
+                   Some (type_argument val_env sarg0 ty ty0))
+              | (l', sarg0) :: _, _ ->
+                  raise(Error(sarg0.pexp_loc, val_env,
+                              Apply_wrong_label l'))
+              | _, (Module (path, _) as l', sarg0) :: more_sargs ->
+                  ([], more_sargs, path, l',
+                   Some (type_argument val_env sarg0 ty ty0))
+              | _, (l', sarg0) :: _ ->
+                  raise(Error(sarg0.pexp_loc, val_env,
+                              Apply_wrong_label l'))
+              | _ ->
+                  assert false
+          in
+          let subst =
+            Subst.add_module_path (Path.Pident m) path Subst.identity
+          in
+          let ty_fun = Subst.class_type subst ty_fun in
+          let ty_fun0 = Subst.class_type subst ty_fun0 in
+          type_args ((l',arg)::args) omitted ty_fun ty_fun0 sargs more_sargs
         | Cty_arrow (l, ty, ty_fun), Cty_arrow (_, ty0, ty_fun0)
           when sargs <> [] || more_sargs <> [] ->
             let name = Btype.label_name l
@@ -1138,9 +1161,7 @@ and class_expr_aux cl_num val_env met_env scl =
                 | _, (l', sarg0)::more_sargs ->
                     let err =
                       match l, l' with
-                      | Module _, Module (_ : uninhabited) -> .
-                      | Module _, _ ->
-                          true
+                      | Module _, _ -> assert false
                       | _, Nolabel -> false
                       | Labelled l, Labelled l'
                       | Optional l, Optional l' -> l <> l'
@@ -1157,12 +1178,12 @@ and class_expr_aux cl_num val_env met_env scl =
                 let (l', sarg0, sargs, more_sargs) =
                   try
                     let (l', sarg0, sargs1, sargs2) =
-                      Btype.extract_label name (arg_labels_there sargs)
-                    in (l', sarg0, arg_labels_back (sargs1 @ sargs2), more_sargs)
+                      Btype.extract_label name sargs
+                    in (l', sarg0, sargs1 @ sargs2, more_sargs)
                   with Not_found ->
                     let (l', sarg0, sargs1, sargs2) =
-                      Btype.extract_label name (arg_labels_there more_sargs)
-                    in (l', sarg0, sargs @ arg_labels_back sargs1, arg_labels_back sargs2)
+                      Btype.extract_label name more_sargs
+                    in (l', sarg0, sargs @ sargs1, sargs2)
                 in
                 if not optional && Btype.is_optional l' then
                   Location.prerr_warning sarg0.pexp_loc
@@ -1184,8 +1205,9 @@ and class_expr_aux cl_num val_env met_env scl =
                   Some (option_none val_env ty0 Location.none)
                 else None
             in
-            let omitted = if arg = None then (arg_label_back l,ty0) :: omitted else omitted in
-            type_args ((arg_label_back l,arg)::args) omitted ty_fun ty_fun0
+            let omitted = if arg = None then (l,ty0) :: omitted else omitted in
+            let l = map_arg_label l ~f:(fun _ -> assert false) in
+            type_args ((l,arg)::args) omitted ty_fun ty_fun0
               sargs more_sargs
         | _ ->
             match sargs @ more_sargs with
@@ -1197,7 +1219,7 @@ and class_expr_aux cl_num val_env met_env scl =
             | [] ->
                 (List.rev args,
                  List.fold_left
-                   (fun ty_fun (l,ty) -> Cty_arrow(arg_label_there l,ty,ty_fun))
+                   (fun ty_fun (l,ty) -> Cty_arrow(l,ty,ty_fun))
                    ty_fun0 omitted)
       in
       let (args, cty) =
@@ -1333,13 +1355,7 @@ let rec approx_description ct =
       let arg =
         if Btype.is_optional l then Ctype.instance var_option
         else Ctype.newvar () in
-      let l =
-        match l with
-        | Nolabel -> Nolabel
-        | Labelled l -> Labelled l
-        | Optional l -> Optional l
-        | Module m -> Module (Ident.create_scoped ~scope:0 m)
-      in
+      let l = map_arg_label ~f:Ident.create_type_module l in
       Ctype.newty (Tarrow (l, arg, approx_description ct, Cok))
   | _ -> Ctype.newvar ()
 

@@ -921,7 +921,7 @@ and longident_x_expression i ppf (li, e) =
 
 and label_x_expression i ppf (l,e) =
   line i ppf "<arg>\n";
-  arg_label (fun _ -> function (_ : uninhabited) -> .) i ppf l;
+  arg_label fmt_longident_loc i ppf l;
   expression (i+1) ppf e;
 
 and label_x_bool_x_core_type_list i ppf x =

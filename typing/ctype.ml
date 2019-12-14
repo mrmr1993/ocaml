@@ -2679,6 +2679,7 @@ and unify3 env t1 t1' t2 t2' =
             Subst.type_expr m2_subst u2
           in
           link_type u2 u2';
+          set_level u2' (repr u1).level;
           set_type_desc t2' (Tarrow (Module m1, t2, u2', c2));
           let mty1 =
             match (repr t1).desc with

@@ -415,6 +415,13 @@ let expression sub exp =
     | Texp_apply (exp, list) ->
         Pexp_apply (sub.expr sub exp,
           List.fold_right (fun (label, expo) list ->
+              let label =
+                match label with
+                | Nolabel -> Nolabel
+                | Labelled l -> Labelled l
+                | Optional l -> Optional l
+                | Module (_, li) -> Module li
+              in
               match expo with
                 None -> list
               | Some exp -> (label, sub.expr sub exp) :: list
@@ -676,6 +683,13 @@ let class_expr sub cexpr =
     | Tcl_apply (cl, args) ->
         Pcl_apply (sub.class_expr sub cl,
           List.fold_right (fun (label, expo) list ->
+              let label =
+                match label with
+                | Nolabel -> Nolabel
+                | Labelled l -> Labelled l
+                | Optional l -> Optional l
+                | Module (_, li) -> Module li
+              in
               match expo with
                 None -> list
               | Some exp -> (label, sub.expr sub exp) :: list

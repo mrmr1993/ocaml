@@ -137,7 +137,7 @@ module Exp:
               -> pattern -> expression -> expression
     val function_: ?loc:loc -> ?attrs:attrs -> case list -> expression
     val apply: ?loc:loc -> ?attrs:attrs -> expression
-               -> (uninhabited arg_label * expression) list -> expression
+               -> (lid arg_label * expression) list -> expression
     val match_: ?loc:loc -> ?attrs:attrs -> expression -> case list
                 -> expression
     val try_: ?loc:loc -> ?attrs:attrs -> expression -> case list -> expression
@@ -414,7 +414,7 @@ module Cl:
     val fun_: ?loc:loc -> ?attrs:attrs -> uninhabited arg_label -> expression option ->
       pattern -> class_expr -> class_expr
     val apply: ?loc:loc -> ?attrs:attrs -> class_expr ->
-      (uninhabited arg_label * expression) list -> class_expr
+      (lid arg_label * expression) list -> class_expr
     val let_: ?loc:loc -> ?attrs:attrs -> rec_flag -> value_binding list ->
       class_expr -> class_expr
     val constraint_: ?loc:loc -> ?attrs:attrs -> class_expr -> class_type ->

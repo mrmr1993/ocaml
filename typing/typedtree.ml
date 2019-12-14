@@ -101,7 +101,9 @@ and expression_desc =
   | Texp_let of rec_flag * value_binding list * expression
   | Texp_function of { arg_label : uninhabited arg_label; param : Ident.t;
       cases : value case list; partial : partial; }
-  | Texp_apply of expression * (uninhabited arg_label * expression option) list
+  | Texp_apply of
+      expression *
+        ((Path.t * Longident.t loc) arg_label * expression option) list
   | Texp_match of expression * computation case list * partial
   | Texp_try of expression * value case list
   | Texp_tuple of expression list
@@ -189,7 +191,9 @@ and class_expr_desc =
   | Tcl_fun of
       uninhabited arg_label * pattern * (Ident.t * expression) list
       * class_expr * partial
-  | Tcl_apply of class_expr * (uninhabited arg_label * expression option) list
+  | Tcl_apply of
+      class_expr *
+        ((Path.t * Longident.t loc) arg_label * expression option) list
   | Tcl_let of rec_flag * value_binding list *
                   (Ident.t * expression) list * class_expr
   | Tcl_constraint of

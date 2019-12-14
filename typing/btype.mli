@@ -199,14 +199,14 @@ val forget_abbrev:
 
 val is_optional : _ arg_label -> bool
 val is_module : _ arg_label -> bool
-val label_name : Ident.t arg_label -> label
+val label_name : _ arg_label -> label
 
 (* Returns the label name with first character '?' or '~' as appropriate. *)
-val prefixed_label_name : uninhabited arg_label -> label
+val prefixed_label_name : _ arg_label -> label
 
 val extract_label :
-    label -> (Ident.t arg_label * 'a) list ->
-    Ident.t arg_label * 'a * (Ident.t arg_label * 'a) list * (Ident.t arg_label * 'a) list
+    label -> ('a arg_label * 'b) list ->
+    'a arg_label * 'b * ('a arg_label * 'b) list * ('a arg_label * 'b) list
     (* actual label, value, before list, after list *)
 
 (**** Utilities for backtracking ****)

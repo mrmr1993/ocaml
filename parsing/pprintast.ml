@@ -1614,7 +1614,7 @@ and label_x_expression_param ctxt f (l,e) =
         pp f "~%s" lbl
       else
         pp f "~%s:%a" lbl (simple_expr ctxt) e
-  | Module (_ : uninhabited) -> .
+  | Module li -> pp f "{%a}" longident_loc li
 
 and directive_argument f x =
   match x.pdira_desc with

@@ -189,7 +189,9 @@ and expression_desc =
               [Partial] if the pattern match is partial
               [Total] otherwise.
          *)
-  | Texp_apply of expression * (uninhabited arg_label * expression option) list
+  | Texp_apply of
+      expression *
+        ((Path.t * Longident.t loc) arg_label * expression option) list
         (** E0 ~l1:E1 ... ~ln:En
 
             The expression can be None if the expression is abstracted over
@@ -320,7 +322,9 @@ and class_expr_desc =
   | Tcl_fun of
       uninhabited arg_label * pattern * (Ident.t * expression) list
       * class_expr * partial
-  | Tcl_apply of class_expr * (uninhabited arg_label * expression option) list
+  | Tcl_apply of
+      class_expr *
+        ((Path.t * Longident.t loc) arg_label * expression option) list
   | Tcl_let of rec_flag * value_binding list *
                   (Ident.t * expression) list * class_expr
   | Tcl_constraint of

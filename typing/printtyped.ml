@@ -917,7 +917,7 @@ and record_field i ppf = function
 
 and label_x_expression i ppf (l, e) =
   line i ppf "<arg>\n";
-  arg_label (fun _ -> function (_ : uninhabited) -> .) (i+1) ppf l;
+  arg_label (fun fmt (li, _) -> fmt_path fmt li) (i+1) ppf l;
   (match e with None -> () | Some e -> expression (i+1) ppf e)
 
 and ident_x_expression_def i ppf (l, e) =

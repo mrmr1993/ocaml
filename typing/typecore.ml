@@ -61,7 +61,7 @@ type error =
       Ctype.Unification_trace.t * type_forcing_context option
       * expression_desc option
   | Apply_non_function of type_expr
-  | Apply_wrong_label of uninhabited arg_label * type_expr
+  | Apply_wrong_label : _ arg_label * type_expr -> error
   | Label_multiply_defined of string
   | Label_missing of Ident.t list
   | Label_not_mutable of Longident.t
@@ -2081,13 +2081,7 @@ let rec approx_type env sty =
   match sty.ptyp_desc with
     Ptyp_arrow (p, _, sty) ->
       let ty1 = if is_optional p then type_option (newvar ()) else newvar () in
-      let p =
-        match p with
-        | Nolabel -> Nolabel
-        | Labelled l -> Labelled l
-        | Optional l -> Optional l
-        | Module m -> Module (Ident.create_scoped ~scope:0 m)
-      in
+      let p = map_arg_label ~f:Ident.create_type_module p in
       newty (Tarrow (p, ty1, approx_type env sty, Cok))
   | Ptyp_tuple args ->
       newty (Ttuple (List.map (approx_type env) args))
@@ -2611,19 +2605,43 @@ and type_expect_
           end_def ();
           generalize_structure funct.exp_type
         end;
-      let rec lower_args seen ty_fun =
+      let rec lower_args env seen ty_fun =
         let ty = expand_head env ty_fun in
         if List.memq ty seen then () else
         match ty.desc with
-          Tarrow (_l, ty_arg, ty_fun, _com) ->
+          Tarrow (Module m, ty_arg, ty_fun, _com) ->
             (try unify_var env (newvar()) ty_arg with Unify _ -> assert false);
-            lower_args (ty::seen) ty_fun
+            let mty =
+              match (repr ty_arg).desc with
+              | Tpackage (p, n, tl) -> !modtype_of_package env p n tl
+              | _ -> assert false
+            in
+            let scope = Ident.scope m in
+            set_type_module_scope m ty_arg.level;
+            let env = Env.add_module m Mp_present mty env in
+            let env = Env.unset_type_local_module m env in
+            let ret = lower_args env (ty::seen) ty_fun in
+            set_type_module_scope m scope;
+            ret
+        | Tarrow (_l, ty_arg, ty_fun, _com) ->
+            (try unify_var env (newvar()) ty_arg with Unify _ -> assert false);
+            lower_args env (ty::seen) ty_fun
         | _ -> ()
       in
       let ty = instance funct.exp_type in
       end_def ();
-      wrap_trace_gadt_instances env (lower_args []) ty;
+      wrap_trace_gadt_instances env (lower_args env []) ty;
       begin_def ();
+      let sargs =
+        List.map
+          (fun (lbl, arg) ->
+            let lbl = map_arg_label lbl ~f:(fun m ->
+              let (path, _) = Env.lookup_module ~loc:m.loc m.txt env in
+              (path, m))
+            in
+            (lbl, arg))
+          sargs
+      in
       let (args, ty_res) = type_application env funct sargs in
       end_def ();
       unify_var env (newvar()) funct.exp_type;
@@ -4030,7 +4048,7 @@ and type_argument ?explanation ?recarg env sarg ty_expected' ty_expected =
               | Nolabel -> (Nolabel, Some ty) :: args
               | Labelled l -> (Labelled l, Some ty) :: args
               | Optional l -> (Optional l, Some ty) :: args
-              | Module _ -> args
+              | Module _ -> assert false
             in
             make_args args ty_fun
         | Tarrow (l,_,ty_res',_) when l = Nolabel || !Clflags.classic ->
@@ -4110,7 +4128,7 @@ and type_application env funct sargs =
           | Nolabel -> Nolabel
           | Labelled l -> Labelled l
           | Optional l -> Optional l
-          | Module (_ : uninhabited) -> .
+          | Module _ -> assert false
         in
         newty2 lv (Tarrow(l,ty,ty_fun,Cok)))
       ty_fun omitted
@@ -4122,7 +4140,7 @@ and type_application env funct sargs =
   let ignored = ref [] in
   let rec type_unknown_args
       (args :
-      (Asttypes.uninhabited Asttypes.arg_label * (unit -> Typedtree.expression) option) list)
+      (_ Asttypes.arg_label * (unit -> Typedtree.expression) option) list)
     omitted ty_fun = function
       [] ->
         (List.map
@@ -4144,21 +4162,26 @@ and type_application env funct sargs =
               in
               if ty_fun.level >= t1.level && not_identity funct.exp_desc then
                 Location.prerr_warning sarg1.pexp_loc Warnings.Unused_argument;
-              let l1 =
-                match l1 with
-                | Nolabel -> Nolabel
-                | Labelled l -> Labelled l
-                | Optional l -> Optional l
-                | Module (_ : uninhabited) -> .
+              let l1 = map_arg_label l1 ~f:(fun _ ->
+                  raise (Error(sarg1.pexp_loc, env,
+                               Apply_wrong_label(l1, ty_fun))) )
               in
               unify env ty_fun (newty (Tarrow(l1,t1,t2,Clink(ref Cunknown))));
               (t1, t2)
+          | Tarrow (Module m, t1, t2, _) ->
+            (match l1 with
+            | Module (path, _lid) ->
+                let env = Env.add_module m Mp_absent (Mty_alias path) env in
+                check_scope_escape sarg1.pexp_loc env t2.level t2;
+                (t1, t2)
+            | _ ->
+                raise (Error(sarg1.pexp_loc, env,
+                             Apply_wrong_label(l1, ty_fun))) )
           | Tarrow (l,t1,t2,_) when
             (match l, l1 with
             | Nolabel, Nolabel -> true
             | Labelled l, Labelled l1
             | Optional l, Optional l1 -> l = l1
-            | Module _, Module (_ : uninhabited) -> .
             | _ -> false)
             || !Clflags.classic && l1 = Nolabel && not (is_optional l) ->
               (t1, t2)
@@ -4168,13 +4191,7 @@ and type_application env funct sargs =
               let ty_res = result_type (omitted @ !ignored) ty_fun in
               match ty_res.desc with
                 Tarrow _ ->
-                  let l1 =
-                    match l1 with
-                    | Nolabel -> Nolabel
-                    | Labelled l -> Labelled l
-                    | Optional l -> Optional l
-                    | Module (_ : uninhabited) -> .
-                  in
+                  let l1 = map_arg_label l1 ~f:(fun _ -> assert false) in
                   if (!Clflags.classic || not (has_label l1 ty_fun)) then
                     raise (Error(sarg1.pexp_loc, env,
                                  Apply_wrong_label(l1, ty_res)))
@@ -4211,17 +4228,40 @@ and type_application env funct sargs =
     end
   in
   let warned = ref false in
-  let arg_label_there = map_arg_label ~f:(function (_ : uninhabited) -> .) in
-  let arg_label_back =
-    map_arg_label ~f:(function _ -> (assert false : uninhabited))
-  in
-  let arg_label_pair_there (lbl, x) = arg_label_there lbl, x in
-  let arg_label_pair_back (lbl, x) = arg_label_back lbl, x in
-  let arg_labels_there = List.map arg_label_pair_there in
-  let arg_labels_back = List.map arg_label_pair_back in
   let rec type_args args omitted ty_fun ty_fun0 ty_old sargs more_sargs =
     match expand_head env ty_fun, expand_head env ty_fun0 with
-      {desc=Tarrow (l, ty, ty_fun, com); level=lv} as ty_fun',
+      {desc=Tarrow (Module m, ty, ty_fun, com); level= lv} as ty_fun',
+      {desc=Tarrow (_, ty0, ty_fun0, _)}
+        when (sargs <> [] || more_sargs <> []) && commu_repr com = Cok ->
+          let sargs, more_sargs, path, l', sarg0, arg =
+            (* In classic mode, omitted = [] *)
+            match sargs, more_sargs with
+              (l', sarg0) :: _, _ when ignore_labels ->
+                raise(Error(sarg0.pexp_loc, env,
+                            Apply_wrong_label(l', ty_old)))
+            | (Module (path, _) as l', sarg0) :: sargs, _ ->
+                (sargs, more_sargs, path, l', sarg0,
+                 Some (fun () -> type_argument env sarg0 ty ty0))
+            | (l', sarg0) :: _, _ ->
+                raise(Error(sarg0.pexp_loc, env,
+                            Apply_wrong_label(l', ty_fun')))
+            | _, (Module (path, _) as l', sarg0) :: more_sargs ->
+                ([], more_sargs, path, l', sarg0,
+                 Some (fun () -> type_argument env sarg0 ty ty0))
+            | _, (l', sarg0) :: _ ->
+                raise(Error(sarg0.pexp_loc, env,
+                            Apply_wrong_label(l', ty_fun')))
+            | _ ->
+                assert false
+          in
+          ignore (sarg0, lv);
+          let subst = Subst.add_module m path Subst.identity in
+          let ty_fun = Subst.type_expr subst ty_fun in
+          let ty_fun0 = Subst.type_expr subst ty_fun0 in
+          let ty_old = if sargs = [] then ty_fun else ty_old in
+          type_args ((l',arg)::args) omitted ty_fun ty_fun0 ty_old sargs
+            more_sargs
+    | {desc=Tarrow (l, ty, ty_fun, com); level=lv} as ty_fun',
       {desc=Tarrow (_, ty0, ty_fun0, _)}
       when (sargs <> [] || more_sargs <> []) && commu_repr com = Cok ->
         let may_warn loc w =
@@ -4243,9 +4283,7 @@ and type_application env funct sargs =
             | _, (l', sarg0) :: more_sargs ->
                 let err =
                   match l, l' with
-                  | Module _, Module (_ : uninhabited) -> .
-                  | Module _, _ ->
-                      true
+                  | Module _, _ -> assert false
                   | _, Nolabel -> false
                   | Labelled l, Labelled l'
                   | Optional l, Optional l' -> l <> l'
@@ -4262,20 +4300,18 @@ and type_application env funct sargs =
           end else try
             let (l', sarg0, sargs, more_sargs) =
               try
-                let sargs = arg_labels_there sargs in
                 let (l', sarg0, sargs1, sargs2) = extract_label name sargs in
                 if sargs1 <> [] then
                   may_warn sarg0.pexp_loc
                     (Warnings.Not_principal "commuting this argument");
-                (l', sarg0, arg_labels_back (sargs1 @ sargs2), more_sargs)
+                (l', sarg0, sargs1 @ sargs2, more_sargs)
               with Not_found ->
-                let more_sargs = arg_labels_there more_sargs in
                 let (l', sarg0, sargs1, sargs2) =
                   extract_label name more_sargs in
                 if sargs1 <> [] || sargs <> [] then
                   may_warn sarg0.pexp_loc
                     (Warnings.Not_principal "commuting this argument");
-                (l', sarg0, sargs @ arg_labels_back sargs1, arg_labels_back sargs2)
+                (l', sarg0, sargs @ sargs1, sargs2)
             in
             if not optional && is_optional l' then
               Location.prerr_warning sarg0.pexp_loc
@@ -4298,7 +4334,6 @@ and type_application env funct sargs =
             then begin
               may_warn funct.exp_loc
                 (Warnings.Without_principality "eliminated optional argument");
-              let l = arg_label_back l in
               ignored := (l,ty,lv) :: !ignored;
               Some (fun () -> option_none env (instance ty) Location.none)
             end else begin
@@ -4308,9 +4343,10 @@ and type_application env funct sargs =
             end
         in
         let omitted =
-          if arg = None then (arg_label_back l,ty,lv) :: omitted else omitted in
+          if arg = None then (l,ty,lv) :: omitted else omitted in
         let ty_old = if sargs = [] then ty_fun else ty_old in
-        type_args ((arg_label_back l,arg)::args) omitted ty_fun ty_fun0
+        let l = map_arg_label l ~f:(fun _ -> assert false) in
+        type_args ((l,arg)::args) omitted ty_fun ty_fun0
           ty_old sargs more_sargs
     | _ ->
         match sargs with
@@ -5161,7 +5197,7 @@ let report_error ~loc env = function
   | Apply_wrong_label (l, ty) ->
       let print_label ppf = function
         | Nolabel -> fprintf ppf "without label"
-        | Asttypes.Module (_ : uninhabited) -> .
+        | Asttypes.Module _ -> fprintf ppf "as a module"
         | l -> fprintf ppf "with label %s" (prefixed_label_name l)
       in
       Location.errorf ~loc

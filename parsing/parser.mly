@@ -131,6 +131,7 @@ let ghtyp ~loc d = Typ.mk ~loc:(ghost_loc loc) d
 let ghloc ~loc d = { txt = d; loc = ghost_loc loc }
 let ghstr ~loc d = Str.mk ~loc:(ghost_loc loc) d
 let ghsig ~loc d = Sig.mk ~loc:(ghost_loc loc) d
+let ghmod ~loc d = Mod.mk ~loc:(ghost_loc loc) d
 
 let mkinfix arg1 op arg2 =
   Pexp_apply(op, [Nolabel, arg1; Nolabel, arg2])
@@ -2358,6 +2359,15 @@ labeled_simple_expr:
         (Optional label, mkexpvar ~loc label) }
   | OPTLABEL simple_expr %prec below_HASH
       { (Optional $1, $2) }
+  | LBRACE MODULE x = mkrhs(mod_longident) RBRACE
+      { ( Module x
+        , mkexp ~loc:$sloc (Pexp_pack (ghmod ~loc:$sloc (Pmod_ident x))) ) }
+  | LBRACE MODULE x = mkrhs(mod_longident) COLON pty = package_type RBRACE
+      { ( Module x
+        , mkexp ~loc:$sloc
+            (Pexp_constraint
+              ( ghexp ~loc:$sloc (Pexp_pack (ghmod ~loc:$sloc (Pmod_ident x)))
+              , pty )) ) }
 ;
 %inline lident_list:
   xs = mkrhs(LIDENT)+
