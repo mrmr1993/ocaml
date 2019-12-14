@@ -3176,7 +3176,6 @@ let filter_arrow env t l =
       link_type t t';
       (t1, t2)
   | Tarrow (Module _, t1, t2, _) when is_module l ->
-      (* TODO: Review this, might not be what we want. *)
       (t1, t2)
   | Tarrow(l', t1, t2, _)
     when l = l' || !Clflags.classic && l = Nolabel && not (is_optional l') ->
