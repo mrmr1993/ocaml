@@ -205,10 +205,11 @@ and transl_type_aux env policy styp =
       | _ -> assert false
     in
     let m = Ident.create_type_module m in
+    let scope = Ident.scope m in
+    Btype.set_type_module_scope m (Ctype.get_current_level());
     let env = Env.add_module m Mp_present mty env in
-    begin_def();
     let cty2 = transl_type env policy st2 in
-    end_def();
+    Btype.set_type_module_scope m scope;
     let ty = newty (Tarrow(Module m, cty1.ctyp_type, cty2.ctyp_type, Cok)) in
     ctyp (Ttyp_arrow (Module m, cty1, cty2)) ty
   | Ptyp_arrow(l, st1, st2) ->

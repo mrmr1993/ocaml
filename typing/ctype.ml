@@ -809,9 +809,9 @@ let check_scope_escape env level ty =
             | _ -> assert false
           in
           let scope = Ident.scope m in
-          set_type_module_scope m (level+1);
+          set_type_module_scope m level;
           let env = Env.add_module m Mp_present mty env in
-          loop env (level+1) u;
+          loop env level u;
           set_type_module_scope m scope
       | _ ->
         iter_type_expr (loop env level) ty
@@ -900,9 +900,9 @@ let rec update_level env level expand ty =
           | _ -> assert false
         in
         let scope = Ident.scope m in
-        set_type_module_scope m (level+1);
+        set_type_module_scope m level;
         let env = Env.add_module m Mp_present mty env in
-        update_level env (level+1) expand u;
+        update_level env level expand u;
         set_type_module_scope m scope
     | _ ->
         set_level ty level;
@@ -1943,7 +1943,7 @@ let occur_univar env ty =
             | _ -> assert false
           in
           let scope = Ident.scope m in
-          set_type_module_scope m (ty.level+1);
+          set_type_module_scope m ty.level;
           let env = Env.add_module m Mp_present mty env in
           let env = Env.unset_type_local_module m env in
           occur_rec env bound u;
