@@ -276,11 +276,12 @@ and expression_desc =
          *)
   | Pexp_function of case list
         (* function P1 -> E1 | ... | Pn -> En *)
-  | Pexp_fun of uninhabited arg_label * expression option * pattern * expression
+  | Pexp_fun of string loc arg_label * expression option * pattern * expression
         (* fun P -> E1                          (Simple, None)
            fun ~l:P -> E1                       (Labelled l, None)
            fun ?l:P -> E1                       (Optional l, None)
            fun ?l:(P = E0) -> E1                (Optional l, Some E0)
+           fun {module M : S} -> E1             (Module M, None)
 
            Notes:
            - If E0 is provided, only Optional is allowed.
@@ -630,11 +631,12 @@ and class_expr_desc =
            ['a1, ..., 'an] c *)
   | Pcl_structure of class_structure
         (* object ... end *)
-  | Pcl_fun of uninhabited arg_label * expression option * pattern * class_expr
+  | Pcl_fun of string loc arg_label * expression option * pattern * class_expr
         (* fun P -> CE                          (Simple, None)
            fun ~l:P -> CE                       (Labelled l, None)
            fun ?l:P -> CE                       (Optional l, None)
            fun ?l:(P = E0) -> CE                (Optional l, Some E0)
+           fun {module M : S} -> E1             (Module M, None)
          *)
   | Pcl_apply of class_expr * (Longident.t loc arg_label * expression) list
         (* CE ~l1:E1 ... ~ln:En

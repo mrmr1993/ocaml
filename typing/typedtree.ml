@@ -99,8 +99,10 @@ and expression_desc =
     Texp_ident of Path.t * Longident.t loc * Types.value_description
   | Texp_constant of constant
   | Texp_let of rec_flag * value_binding list * expression
-  | Texp_function of { arg_label : uninhabited arg_label; param : Ident.t;
-      cases : value case list; partial : partial; }
+  | Texp_function of
+      { arg_label : (Ident.t * string loc) arg_label
+      ; param : Ident.t
+      ; cases : value case list; partial : partial }
   | Texp_apply of
       expression *
         ((Path.t * Longident.t loc) arg_label * expression option) list
@@ -189,7 +191,7 @@ and class_expr_desc =
     Tcl_ident of Path.t * Longident.t loc * core_type list
   | Tcl_structure of class_structure
   | Tcl_fun of
-      uninhabited arg_label * pattern * (Ident.t * expression) list
+      (Ident.t * string loc) arg_label * pattern * (Ident.t * expression) list
       * class_expr * partial
   | Tcl_apply of
       class_expr *

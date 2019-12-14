@@ -46,8 +46,6 @@ type closed_flag = Closed | Open
 
 type label = string
 
-type uninhabited = |
-
 type 'module_type arg_label =
     Nolabel
   | Labelled of string (*  label:T -> ... *)

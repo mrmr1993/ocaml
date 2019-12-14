@@ -1064,17 +1064,19 @@ and class_expr_aux cl_num val_env met_env scl =
       if Btype.is_optional l && not_function cl.cl_type then
         Location.prerr_warning pat.pat_loc
           Warnings.Unerasable_optional_argument;
-      let l =
-        match l with
-        | Nolabel -> Nolabel
-        | Labelled l -> Labelled l
-        | Optional l -> Optional l
-        | Module _ -> .
+      let l = map_arg_label l ~f:(fun l ->
+        let id =
+          match pv with
+          | [(id, _)] -> id
+          | _ -> assert false
+        in
+        (id, l))
       in
+      let l' = map_arg_label ~f:fst l in
       rc {cl_desc = Tcl_fun (l, pat, pv, cl, partial);
           cl_loc = scl.pcl_loc;
           cl_type = Cty_arrow
-            (l, Ctype.instance pat.pat_type, cl.cl_type);
+            (l', Ctype.instance pat.pat_type, cl.cl_type);
           cl_env = val_env;
           cl_attributes = scl.pcl_attributes;
          }
@@ -1335,13 +1337,7 @@ let rec approx_declaration cl =
       let arg =
         if Btype.is_optional l then Ctype.instance var_option
         else Ctype.newvar () in
-      let l =
-        match l with
-        | Nolabel -> Nolabel
-        | Labelled l -> Labelled l
-        | Optional l -> Optional l
-        | Module (_ : uninhabited) -> .
-      in
+      let l = map_arg_label l ~f:(fun l -> Ident.create_type_module l.txt) in
       Ctype.newty (Tarrow (l, arg, approx_declaration cl, Cok))
   | Pcl_let (_, _, cl) ->
       approx_declaration cl

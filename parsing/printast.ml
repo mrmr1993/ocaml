@@ -273,7 +273,7 @@ and expression i ppf x =
       list i case ppf l;
   | Pexp_fun (l, eo, p, e) ->
       line i ppf "Pexp_fun\n";
-      arg_label (fun _ -> function (_ : uninhabited) -> .) i ppf l;
+      arg_label fmt_string_loc i ppf l;
       option i expression ppf eo;
       pattern i ppf p;
       expression i ppf e;
@@ -580,7 +580,7 @@ and class_expr i ppf x =
       class_structure i ppf cs;
   | Pcl_fun (l, eo, p, e) ->
       line i ppf "Pcl_fun\n";
-      arg_label (fun _ -> function (_ : uninhabited) -> .) i ppf l;
+      arg_label fmt_string_loc i ppf l;
       option i expression ppf eo;
       pattern i ppf p;
       class_expr i ppf e;

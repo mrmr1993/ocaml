@@ -400,6 +400,13 @@ let expression sub exp =
     (* One case, no guard: It's a fun. *)
     | Texp_function { arg_label; cases = [{c_lhs=p; c_guard=None; c_rhs=e}];
           _ } ->
+        let arg_label =
+          match arg_label with
+          | Nolabel -> Nolabel
+          | Labelled l -> Labelled l
+          | Optional l -> Optional l
+          | Module (_, li) -> Module li
+        in
         Pexp_fun (arg_label, None, sub.pat sub p, sub.expr sub e)
     (* No label: it's a function. *)
     | Texp_function { arg_label = Nolabel; cases; _; } ->
@@ -411,7 +418,7 @@ let expression sub exp =
         Pexp_fun (label, None, Pat.var ~loc {loc;txt = name },
           Exp.match_ ~loc (Exp.ident ~loc {loc;txt= Lident name})
                           (List.map (sub.case sub) cases))
-    | Texp_function { arg_label = Module _ ; _ } -> .
+    | Texp_function { arg_label= Module _; _ } -> assert false
     | Texp_apply (exp, list) ->
         Pexp_apply (sub.expr sub exp,
           List.fold_right (fun (label, expo) list ->
@@ -678,6 +685,13 @@ let class_expr sub cexpr =
     | Tcl_structure clstr -> Pcl_structure (sub.class_structure sub clstr)
 
     | Tcl_fun (label, pat, _pv, cl, _partial) ->
+        let label =
+          match label with
+          | Nolabel -> Nolabel
+          | Labelled l -> Labelled l
+          | Optional l -> Optional l
+          | Module (_, li) -> Module li
+        in
         Pcl_fun (label, None, sub.pat sub pat, sub.class_expr sub cl)
 
     | Tcl_apply (cl, args) ->

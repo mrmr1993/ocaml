@@ -524,7 +524,14 @@ and label_exp ctxt f (l,opt,p) =
         pp f "~%s@;" l
     | _ ->  pp f "~%s:%a@;" l (simple_pattern ctxt) p
     end
-  | Module (_ : uninhabited) -> .
+  | Module m ->
+    begin match p with
+    | {ppat_desc=
+        Ppat_constraint ({ppat_desc= Ppat_unpack _; _},
+                         {ptyp_desc= Ptyp_package pkg; _}); _} ->
+      pp f "{module %s@ :@ @[<hov2>%a@]}" m.txt (package_type ctxt) pkg
+    | _ -> assert false
+    end
 
 and sugar_expr ctxt f e =
   if e.pexp_attributes <> [] then false
@@ -1614,7 +1621,14 @@ and label_x_expression_param ctxt f (l,e) =
         pp f "~%s" lbl
       else
         pp f "~%s:%a" lbl (simple_expr ctxt) e
-  | Module li -> pp f "{%a}" longident_loc li
+  | Module li ->
+      begin match e with
+      | {pexp_desc= Pexp_constraint (_, {ptyp_desc= Ptyp_package pkg; _}); _}
+        ->
+          pp f "{module %a :@ @[<hov2>%a@]}" longident_loc li
+            (package_type ctxt) pkg
+      | _ -> pp f "{module %a}" longident_loc li
+      end
 
 and directive_argument f x =
   match x.pdira_desc with

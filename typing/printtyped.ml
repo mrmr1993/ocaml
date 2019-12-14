@@ -321,7 +321,7 @@ and expression i ppf x =
       expression i ppf e;
   | Texp_function { arg_label = p; param = _; cases; partial = _; } ->
       line i ppf "Texp_function\n";
-      arg_label (fun _ -> function (_ : uninhabited) -> .) i ppf p;
+      arg_label (fun fmt (id, _) -> fmt_ident fmt id) i ppf p;
       list i case ppf cases;
   | Texp_apply (e, l) ->
       line i ppf "Texp_apply\n";
@@ -597,7 +597,7 @@ and class_expr i ppf x =
       class_structure i ppf cs;
   | Tcl_fun (l, p, _, ce, _) ->
       line i ppf "Tcl_fun\n";
-      arg_label (fun _ -> function (_ : uninhabited) -> .) i ppf l;
+      arg_label (fun fmt (id, _) -> fmt_ident fmt id) i ppf l;
       pattern i ppf p;
       class_expr i ppf ce
   | Tcl_apply (ce, l) ->

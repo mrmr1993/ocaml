@@ -177,8 +177,10 @@ and expression_desc =
         (** let P1 = E1 and ... and Pn = EN in E       (flag = Nonrecursive)
             let rec P1 = E1 and ... and Pn = EN in E   (flag = Recursive)
          *)
-  | Texp_function of { arg_label : uninhabited arg_label; param : Ident.t;
-      cases : value case list; partial : partial; }
+  | Texp_function of
+      { arg_label : (Ident.t * string loc) arg_label
+      ; param : Ident.t
+      ; cases : value case list; partial : partial }
         (** [Pexp_fun] and [Pexp_function] both translate to [Texp_function].
             See {!Parsetree} for more details.
 
@@ -320,7 +322,7 @@ and class_expr_desc =
     Tcl_ident of Path.t * Longident.t loc * core_type list
   | Tcl_structure of class_structure
   | Tcl_fun of
-      uninhabited arg_label * pattern * (Ident.t * expression) list
+      (Ident.t * string loc) arg_label * pattern * (Ident.t * expression) list
       * class_expr * partial
   | Tcl_apply of
       class_expr *

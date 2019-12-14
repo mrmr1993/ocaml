@@ -2046,6 +2046,13 @@ labeled_simple_pattern:
       { (Labelled (fst $2), None, snd $2) }
   | LABEL simple_pattern
       { (Labelled $1, None, $2) }
+  | LBRACE MODULE x = mkrhs(UIDENT) COLON pty = package_type RBRACE
+      { ( Module x
+        , None
+        , mkpat ~loc:$sloc
+            (Ppat_constraint
+              ( ghpat ~loc:$sloc (Ppat_unpack {txt= Some x.txt; loc= x.loc})
+              , pty )) ) }
   | simple_pattern
       { (Nolabel, None, $1) }
 ;

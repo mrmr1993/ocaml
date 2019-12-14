@@ -133,7 +133,7 @@ module Exp:
     val constant: ?loc:loc -> ?attrs:attrs -> constant -> expression
     val let_: ?loc:loc -> ?attrs:attrs -> rec_flag -> value_binding list
               -> expression -> expression
-    val fun_: ?loc:loc -> ?attrs:attrs -> uninhabited arg_label -> expression option
+    val fun_: ?loc:loc -> ?attrs:attrs -> str arg_label -> expression option
               -> pattern -> expression -> expression
     val function_: ?loc:loc -> ?attrs:attrs -> case list -> expression
     val apply: ?loc:loc -> ?attrs:attrs -> expression
@@ -411,7 +411,7 @@ module Cl:
 
     val constr: ?loc:loc -> ?attrs:attrs -> lid -> core_type list -> class_expr
     val structure: ?loc:loc -> ?attrs:attrs -> class_structure -> class_expr
-    val fun_: ?loc:loc -> ?attrs:attrs -> uninhabited arg_label -> expression option ->
+    val fun_: ?loc:loc -> ?attrs:attrs -> str arg_label -> expression option ->
       pattern -> class_expr -> class_expr
     val apply: ?loc:loc -> ?attrs:attrs -> class_expr ->
       (lid arg_label * expression) list -> class_expr
