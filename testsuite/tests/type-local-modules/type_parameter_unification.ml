@@ -31,8 +31,8 @@ type 'a module_args = {M : Monad} -> 'a M.t -> 'a M.t
 let unify_parameters (x : {M : Monad} -> int M.t -> int M.t) : _ module_args = x;;
 
 [%%expect{|
-val unify_parameters :
-  ({M : Monad} -> int M.t -> int M.t) -> int module_args = <fun>
+val unify_parameters : ({M : Monad} -> int M.t -> int M.t) -> int module_args =
+  <fun>
 |}]
 
 let unify_parameters_fail (x : {M : Monad} -> int M.t -> bool M.t) : _ module_args = x;;

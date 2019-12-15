@@ -186,11 +186,17 @@ let new_fun {module M : Monad} (x : 'a M.t) (y : 'b M.t) =
 val new_fun : {M : Monad} -> 'a M.t -> 'b M.t -> ('a * 'b) M.t = <fun>
 |}]
 
-let new_fun_list = new_fun {module List};;
+let new_fun_list_weak = new_fun {module List};;
 
 [%%expect{|
-val new_fun_list :
-  'a List.t -> 'b List.t -> ('a * 'b) List.t = <fun>
+val new_fun_list_weak :
+  '_weak1 List.t -> '_weak2 List.t -> ('_weak1 * '_weak2) List.t = <fun>
+|}]
+
+let new_fun_list x y = new_fun {module List} x y;;
+
+[%%expect{|
+val new_fun_list : 'a List.t -> 'b List.t -> ('a * 'b) List.t = <fun>
 |}]
 
 module type Carries_sig = sig
@@ -218,7 +224,7 @@ val carries_param :
 |}]
 
 let apply_carries_param =
-  carries_param {module Carries_monad} (fun (module M) ->
+  carries_param {module Carries_monad} (fun (module M : Carries_monad.S) ->
     let x = ref 80 in
     let y = M.return 15 in
     ignore @@ M.map y ~f:(fun y -> x := !x + y; y);
