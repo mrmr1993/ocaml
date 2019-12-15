@@ -3691,222 +3691,140 @@ and type_module_function ?in_function loc attrs env ty_expected_explained m
     | None -> (loc, instance ty_expected)
   in
   let id = Ident.create_type_module m.txt in
-  let scope = Ident.scope id in
-  set_type_module_scope id (get_current_level());
+  let old_scope = Ident.scope id in
+  let scope = create_scope () in
   let separate = !Clflags.principal || Env.has_local_constraints env in
   if separate then begin_def ();
-  let (ty_arg, ty_res) =
-    try
-      filter_arrow env (instance ty_expected) (Module id)
-    with Unify _ ->
-      match expand_head env ty_expected with
-        {desc = Tarrow _} as ty ->
-          raise(Error(loc, env,
-                      Abstract_wrong_label(Module id, ty, explanation)))
-      | _ ->
-          raise(Error(loc_fun, env,
-                      Too_many_arguments (in_function <> None,
-                                          ty_fun,
-                                          explanation)))
-  in
-  let id =
-    match (expand_head env ty_expected).desc with
-    | Tarrow (Module id, _, _, _) -> id
-    | _ -> assert false
+  let ty_arg =
+    match expand_head env (instance ty_expected) with
+      {desc= Tarrow (Module _, ty_arg, _, _); _} -> ty_arg
+    | {desc= Tvar _; level} -> newvar2 level
+    | {desc= Tarrow _; _} as ty ->
+        raise(Error(loc, env,
+                    Abstract_wrong_label(Module id, ty, explanation)))
+    | _ ->
+        raise(Error(loc_fun, env,
+                    Too_many_arguments (in_function <> None,
+                                        ty_fun,
+                                        explanation)))
   in
   if separate then begin
     end_def ();
-    generalize_structure ty_arg;
-    generalize_structure ty_res
+    generalize_structure ty_arg
   end;
-  let cases, partial =
-    let outer_level = get_current_level () in
-    let lev = get_current_level () in
-    let take_partial_instance =
-      if !Clflags.principal then Some false else None
-    in
-    begin_def (); (* propagation of the argument *)
-    let half_typed_case, force =
-      let case = {pc_lhs= spat; pc_guard= None; pc_rhs= sbody} in
-      if !Clflags.principal then begin_def (); (* propagation of pattern *)
-      begin_def ();
-      let ty_arg = instance ?partial:take_partial_instance ty_arg in
-      end_def ();
-      generalize_structure ty_arg;
-      let (pat, force, pv) =
-        Builtin_attributes.warning_scope spat.ppat_attributes (fun () ->
-           match spat.ppat_desc with
-           | Ppat_constraint(sp, sty) ->
-               (* Pretend separate = true *)
-               begin_def();
-               let cty, force = Typetexp.transl_simple_type_delayed env sty in
-               let ty = cty.ctyp_type in
-               end_def();
-               generalize_structure ty;
-               let ty, expected_ty' = instance ty, ty in
-               unify_pat_types loc env ty (instance ty_arg);
-               let t = instance expected_ty' in
-               let p = rp
-               {
-                 pat_desc = Tpat_var (id, m);
-                 pat_loc = sp.ppat_loc;
-                 pat_extra=[Tpat_unpack, loc, sp.ppat_attributes];
-                 pat_type = t;
-                 pat_attributes = [];
-                 pat_env = env }
-                in
-               let extra =
-                 ( Tpat_constraint cty
-                 , spat.ppat_loc
-                 , spat.ppat_attributes ) in
-               ( { p with
-                   pat_type = ty;
-                   pat_desc =
-                     Tpat_alias
-                       ({p with pat_desc = Tpat_any; pat_attributes = []}, id,m);
-                   pat_extra = [extra] }
-               , force
-               , { pv_id = id;
-                   pv_type = t;
-                   pv_loc = m.loc;
-                   pv_as_var = false;
-                   pv_attributes = [] } )
-            | _ -> assert false )
-      in
-      let pat =
-        if !Clflags.principal then begin
-          end_def ();
-          generalize_structure pv.pv_type;
-          { pat with pat_type = instance pat.pat_type }
-        end else pat
-      in
-      (* Ensure that no ambivalent pattern type escapes its branch *)
-      check_scope_escape pat.pat_loc env outer_level ty_arg;
-      { typed_pat = pat;
-        pat_type_for_unif = ty_arg;
-        untyped_case = case;
-        branch_env = env;
-        pat_vars = [pv];
-        unpacks = [];
-        contains_gadt = false; }, force
-    in
-    (* Unify all cases (delayed to keep it order-free) *)
-    let ty_arg' = newvar () in
-    let unify_pats ty =
-      let { typed_pat = pat; pat_type_for_unif = pat_ty; _ } = half_typed_case in
-      unify_pat_types pat.pat_loc env pat_ty ty
-    in
-    unify_pats ty_arg';
-    (* `Contaminating' unification starts here *)
-    force();
-    (* Post-processing and generalization *)
-    if take_partial_instance <> None then unify_pats (instance ty_arg);
-    iter_pattern_variables_type (fun t -> unify_var env (newvar()) t)
-      half_typed_case.pat_vars;
-    end_def ();
-    generalize ty_arg';
-    iter_pattern_variables_type generalize half_typed_case.pat_vars;
-    (* type bodies *)
-    let cases =
-      let { typed_pat = pat; pat_vars = pvs;
-               untyped_case = {pc_rhs= sexp; _}; _ } =
-        half_typed_case
-      in
-      let env =
-        add_pattern_variables env pvs
-          ~check:(fun s -> Warnings.Unused_var_strict s)
-          ~check_as:(fun s -> Warnings.Unused_var s)
-      in
-      let ty_res' =
-        if !Clflags.principal then begin
-          begin_def ();
-          let ty = instance ~partial:true ty_res in
-          end_def ();
-          generalize_structure ty; ty
-        end
-        else ty_res in
-      let ty_expected_explained = mk_expected ty_res' in
-      let previous_saved_types = Cmt_format.get_saved_types () in
-      let exp =
-        Builtin_attributes.warning_scope sexp.pexp_attributes
-          (fun () ->
-            let ty = newvar() in
-            (* remember original level *)
-            begin_def ();
-            let context = Typetexp.narrow () in
-            let smodl =
-              let open Ast_helper in
-              Mod.unpack ~loc:m.loc
-                (Exp.ident ~loc:m.loc
-                  (mkloc (Longident.Lident m.txt) m.loc))
-            in
-            let modl = !type_module env smodl in
-            Mtype.lower_nongen ty.level modl.mod_type;
-            let pres =
-              match modl.mod_type with
-              | Mty_alias _ -> Mp_absent
-              | _ -> Mp_present
-            in
-            let md =
-              { md_type = modl.mod_type; md_attributes = []; md_loc = m.loc }
-            in
-            let new_env = Env.add_module_declaration ~check:true id pres md env in
-            Typetexp.widen context;
-            (* ideally, we should catch Expr_type_clash errors
-               in type_expect triggered by escaping identifiers from the local module
-               and refine them into Scoping_let_module errors
-            *)
-            let body = type_expect new_env sexp ty_expected_explained in
-            (* go back to original level *)
-            end_def ();
-            Ctype.unify_var new_env ty body.exp_type;
-            let m = {m with txt= Some m.txt} in
-            re {
-              exp_desc = Texp_letmodule(Some id, m, pres, modl, body);
-              exp_loc = {sexp.pexp_loc with loc_ghost= true};
-              exp_extra = [];
-              exp_type = ty;
-              exp_attributes =
-                [Ast_helper.Attr.mk (mknoloc "#modulepat") (PStr [])];
-              exp_env = env }
-          )
-      in
-      Cmt_format.set_saved_types
-        (Cmt_format.Partial_expression exp :: previous_saved_types);
-      [{
-       c_lhs = pat;
-       c_guard = None;
-       c_rhs = {exp with exp_type = instance ty_res'}
-      }]
-    in
-    if !Clflags.principal then begin
-      let ty_res' = instance ty_res in
-      with_attached_type_module (get_current_level()) id ty_arg' env
-        ~f:(fun env ->
-          let env = Env.unset_type_local_module id env in
-          List.iter (fun c -> unify_exp env c.c_rhs ty_res') cases)
-    end;
-    let do_init = true in
-    let ty_arg_check =
-      if do_init then
-        (* Hack: use for_saving to copy variables too *)
-        Subst.type_expr (Subst.for_saving Subst.identity) ty_arg'
-      else ty_arg'
-    in
-    let partial = check_partial ~lev env ty_arg_check loc cases in
-    begin_def (); init_def lev;
-    check_unused ~lev env ty_arg_check cases ;
-    end_def ();
-    Parmatch.check_ambiguous_bindings cases ;
-    cases, partial
+  let lev = get_current_level () in
+  let take_partial_instance =
+    if !Clflags.principal then Some false else None
   in
+  begin_def (); (* propagation of the argument *)
+  let (pat, pv, unpack) =
+    if !Clflags.principal then begin_def (); (* propagation of pattern *)
+    let scope = Some (Annot.Idef spat.ppat_loc) in
+    begin_def ();
+    let ty_arg' = instance ?partial:take_partial_instance ty_arg in
+    end_def ();
+    generalize_structure ty_arg';
+    let (pat, force, pv, unpack) =
+      match type_pattern Value ~lev env spat scope ty_arg' with
+      | (pat, _ext_env, force, [pv], [unpack]) -> (pat, force, pv, unpack)
+      | _ -> assert false
+    in
+    let pat =
+      if !Clflags.principal then begin
+        end_def ();
+        generalize_structure pv.pv_type;
+        { pat with pat_type = instance pat.pat_type }
+      end else pat
+    in
+    (* Ensure that no ambivalent pattern type escapes its branch *)
+    check_scope_escape pat.pat_loc env lev ty_arg';
+    (* `Contaminating' unifications start here *)
+    List.iter (fun f -> f()) force;
+    (* Post-processing and generalization *)
+    if take_partial_instance <> None then
+      unify_pat_types pat.pat_loc env ty_arg (instance ty_arg);
+    unify_var env (newvar ()) pv.pv_type;
+    (pat, pv, unpack)
+  in
+  end_def ();
+  generalize pv.pv_type;
   set_type_module_scope id scope;
+  let case =
+    let env =
+      add_pattern_variables env [pv]
+        ~check:(fun s -> Warnings.Unused_var_strict s)
+        ~check_as:(fun s -> Warnings.Unused_var s)
+    in
+    let previous_saved_types = Cmt_format.get_saved_types () in
+    let exp =
+      let ty = newvar() in
+      (* remember original level *)
+      begin_def ();
+      let context = Typetexp.narrow () in
+      let smodl =
+        let m = fst unpack in
+        let open Ast_helper in
+        Mod.unpack ~loc:m.loc
+          (Exp.ident ~loc:m.loc
+            (mkloc (Longident.Lident m.txt) m.loc))
+      in
+      let modl = !type_module env smodl in
+      Mtype.lower_nongen ty.level modl.mod_type;
+      let pres =
+        match modl.mod_type with
+        | Mty_alias _ -> Mp_absent
+        | _ -> Mp_present
+      in
+      let md =
+        { md_type = modl.mod_type; md_attributes = []; md_loc = m.loc }
+      in
+      let new_env = Env.add_module_declaration ~check:true id pres md env in
+      Typetexp.widen context;
+      let body = type_exp new_env sbody in
+      end_def ();
+      Ctype.unify_var new_env ty body.exp_type;
+      let m = {m with txt= Some m.txt} in
+      re {
+        exp_desc = Texp_letmodule(Some id, m, pres, modl, body);
+        exp_loc = {sbody.pexp_loc with loc_ghost= true};
+        exp_extra = [];
+        exp_type = ty;
+        exp_attributes =
+          [Ast_helper.Attr.mk (mknoloc "#modulepat") (PStr [])];
+        exp_env = env }
+    in
+    Cmt_format.set_saved_types
+      (Cmt_format.Partial_expression exp :: previous_saved_types);
+    {
+     c_lhs = pat;
+     c_guard = None;
+     c_rhs = exp
+    }
+  in
+  set_type_module_scope id old_scope;
+  let gen_exp_type =
+    newgenty
+      (Tarrow(Module id, case.c_lhs.pat_type, case.c_rhs.exp_type, Cok))
+  in
+  let ty_expected' =
+    if !Clflags.principal then begin
+      generalize_structure ty_expected;
+      instance ty_expected
+    end else ty_expected
+  in
+  let exp_type = instance gen_exp_type in
+  unify_exp_types case.c_rhs.exp_loc env exp_type ty_expected';
+  let exp_type =
+    if !Clflags.principal then instance gen_exp_type else exp_type
+  in
+  let cases = [case] in
   let param = name_cases "param" cases in
   re {
-    exp_desc = Texp_function
-      { arg_label = Module (id, m); param; cases; partial; };
+    exp_desc =
+      Texp_function
+        { arg_label = Module (id, m); param; cases; partial= Total; };
     exp_loc = loc; exp_extra = [];
-    exp_type = instance (newgenty (Tarrow(Module id, ty_arg, ty_res, Cok)));
+    exp_type;
     exp_attributes = attrs;
     exp_env = env }
 
