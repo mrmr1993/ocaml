@@ -4482,8 +4482,8 @@ and type_application env funct sargs =
           in
           ignore (sarg0, lv);
           let subst = Subst.add_module m path Subst.identity in
-          let ty_fun = Subst.type_expr subst ty_fun in
-          let ty_fun0 = Subst.type_expr subst ty_fun0 in
+          let ty_fun = instance (Subst.type_expr subst ty_fun) in
+          let ty_fun0 = instance (Subst.type_expr subst ty_fun0) in
           let ty_old = if sargs = [] then ty_fun else ty_old in
           type_args ((l',arg)::args) omitted ty_fun ty_fun0 ty_old sargs
             more_sargs
