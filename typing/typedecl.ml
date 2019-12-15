@@ -576,8 +576,8 @@ let rec check_constraints_rec env loc visited ty =
       check_constraints_rec env loc visited ty
   | Tarrow (Module m1, t1, u1, _) ->
       check_constraints_rec env loc visited t1;
-      Ctype.with_attached_type_module m1 t1 env ~f:(fun env ->
-        check_constraints_rec env loc visited u1 )
+      Ctype.with_attached_type_module (Ctype.get_current_level()) m1 t1 env
+        ~f:(fun env -> check_constraints_rec env loc visited u1 )
   | _ ->
       Btype.iter_type_expr (check_constraints_rec env loc visited) ty
   end

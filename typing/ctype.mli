@@ -159,9 +159,11 @@ val filter_row_fields:
         bool -> (label * row_field) list -> (label * row_field) list
 
 val with_attached_type_module:
-        ?marked:bool -> Ident.t -> type_expr -> Env.t -> f:(Env.t -> 'a) -> 'a
+        ?marked:bool -> int -> Ident.t -> type_expr -> Env.t ->
+        f:(Env.t -> 'a) -> 'a
 (** Evaluate the argument [f] in an environment with the module type packaged
-    in the [type_expr] argument attached at the given [Ident.t].
+    in the [type_expr] argument attached at the given [Ident.t]. The [int]
+    argument specifies the scope that the [Ident.t] should report.
 
     This may be used to help generate an evironment for evaluating [u] when
     iterating through a [Tarrow(Module m, t, u, _)] type.

@@ -529,14 +529,14 @@ let rec filter_row_fields erase = function
 
 let modtype_of_package = ref (fun _ _ _ _ -> assert false)
 
-let with_attached_type_module ?(marked = false) m t env ~f =
+let with_attached_type_module ?(marked = false) s m t env ~f =
   let mty =
     match (repr t).desc with
     | Tpackage (p, n, tl) -> !modtype_of_package env p n tl
     | _ -> assert false
   in
   let scope = Ident.scope m in
-  set_type_module_scope m (repr t).level;
+  set_type_module_scope m s;
   let env =
     if marked then
       Env.add_module m Mp_present mty env
@@ -588,7 +588,7 @@ let rec free_vars_rec real ty =
         if not (static_row row) then free_vars_rec false row.row_more
     | Tarrow (Module m, t, u, _), Some env ->
         free_vars_rec true t;
-        with_attached_type_module m t env ~f:(fun env ->
+        with_attached_type_module ty.level m t env ~f:(fun env ->
           really_closed := Some env;
           free_vars_rec true u);
         really_closed := Some env
@@ -832,7 +832,7 @@ let check_scope_escape env level ty =
           aux { ty with desc = Tpackage (p', nl, tl) }
       | Tarrow (Module m, t, u, _) ->
           loop env level t;
-          with_attached_type_module m t env ~f:(fun env ->
+          with_attached_type_module level m t env ~f:(fun env ->
             loop env level u)
       | _ ->
         iter_type_expr (loop env level) ty
@@ -915,7 +915,7 @@ let rec update_level env level expand ty =
     | Tarrow (Module m, t, u, _) ->
         set_level ty level;
         update_level env level expand t;
-        with_attached_type_module m t env ~f:(fun env ->
+        with_attached_type_module level m t env ~f:(fun env ->
           update_level env level expand u)
     | _ ->
         set_level ty level;
@@ -981,7 +981,7 @@ let rec lower_contravariant env var_level visited contra ty =
         List.iter (lower_rec true) tyl
     | Tarrow (Module m, t, u, _) ->
         lower_rec true t;
-        with_attached_type_module m t env ~f:(fun env ->
+        with_attached_type_module ty.level m t env ~f:(fun env ->
           lower_contravariant env var_level visited contra u)
     | Tarrow (_, t1, t2, _) ->
         lower_rec true t1;
@@ -1810,7 +1810,7 @@ let rec occur_rec env allow_recursive visited ty0 = function
       if allow_recursive ||  TypeSet.mem ty visited then () else begin
         let visited = TypeSet.add ty visited in
         occur_rec env allow_recursive visited ty0 t;
-        with_attached_type_module m t env ~f:(fun env ->
+        with_attached_type_module ty.level m t env ~f:(fun env ->
           occur_rec env allow_recursive visited ty0 u)
       end
   | _ ->
@@ -1875,7 +1875,7 @@ let rec local_non_recursive_abbrev strict visited env p ty =
         if strict then begin
           let visited = ty :: visited in
           local_non_recursive_abbrev true visited env p t;
-          with_attached_type_module m t env ~f:(fun env ->
+          with_attached_type_module ty.level m t env ~f:(fun env ->
             local_non_recursive_abbrev true visited env p u)
         end
     | _ ->
@@ -1968,7 +1968,7 @@ let occur_univar env ty =
           end
       | Tarrow (Module m, t, u, _) ->
           occur_rec env bound t;
-          with_attached_type_module m t env ~f:(fun env ->
+          with_attached_type_module ty.level m t env ~f:(fun env ->
             let env = Env.unset_type_local_module m env in
             occur_rec env bound u)
       | _ -> iter_type_expr (occur_rec env bound) ty
@@ -2019,9 +2019,9 @@ let univars_escape env univar_pairs vl ty =
           with Not_found ->
             List.iter (occur env) tl
           end
-      | Tarrow (Module m, t, u, _) ->
-          occur env t;
-          with_attached_type_module m t env ~f:(fun env ->
+      | Tarrow (Module m, t', u, _) ->
+          occur env t';
+          with_attached_type_module t.level m t' env ~f:(fun env ->
             let env = Env.unset_type_local_module m env in
             occur env u)
       | _ ->
@@ -2277,8 +2277,9 @@ let rec mcomp type_pairs env t1 t2 =
             ()
         | (Tarrow (Module m1, t1, u1, _), Tarrow (Module m2, t2, u2, _)) ->
             mcomp type_pairs env t1 t2;
-            with_attached_type_module m1 t1 env ~f:(fun env ->
-              with_attached_type_module m2 t2 env ~f:(fun env ->
+            let level = min t1.level t2.level in
+            with_attached_type_module level m1 t1 env ~f:(fun env ->
+              with_attached_type_module level m2 t2 env ~f:(fun env ->
                 mcomp type_pairs env u1 u2))
         | (Tarrow (l1, t1, u1, _), Tarrow (l2, t2, u2, _))
           when l1 = l2 || not (is_optional l1 || is_optional l2) ->
@@ -3344,10 +3345,10 @@ let rec moregen inst_nongen type_pairs env t1 t2 =
                 in
                 Subst.type_expr m2_subst u2
               in
-              with_attached_type_module m1 t1 env ~f:(fun env ->
-                with_attached_type_module m2 t2 env ~f:(fun env ->
-                  update_level env (repr u2).level u2';
-                  moregen inst_nongen type_pairs env u1 u2 ))
+              let level = min t1.level t2.level in
+              with_attached_type_module level m1 t1 env ~f:(fun env ->
+                update_level env (repr u2).level u2';
+                moregen inst_nongen type_pairs env u1 u2' )
           | (Tarrow (l1, t1, u1, _), Tarrow (l2, t2, u2, _)) when l1 = l2
             || !Clflags.classic && not (is_optional l1 || is_optional l2) ->
               moregen inst_nongen type_pairs env t1 t2;
@@ -3628,10 +3629,10 @@ let rec eqtype rename type_pairs subst env t1 t2 =
                 in
                 Subst.type_expr m2_subst u2
               in
-              with_attached_type_module m1 t1 env ~f:(fun env ->
-                with_attached_type_module m2 t2 env ~f:(fun env ->
-                  update_level env (repr u2).level u2';
-                  eqtype rename type_pairs subst env u1 u2' ))
+              let level = min t1.level t2.level in
+              with_attached_type_module level m1 t1 env ~f:(fun env ->
+                update_level env (repr u2).level u2';
+                eqtype rename type_pairs subst env u1 u2' )
           | (Tarrow (l1, t1, u1, _), Tarrow (l2, t2, u2, _)) when l1 = l2
             || !Clflags.classic && not (is_optional l1 || is_optional l2) ->
               eqtype rename type_pairs subst env t1 t2;
@@ -4125,7 +4126,7 @@ let rec build_subtype env visited loops posi level t =
       let visited = t :: visited in
       let (t1', c1) = build_subtype env visited loops (not posi) level t1 in
       let (t2', c2) =
-        with_attached_type_module m t1 env ~f:(fun env ->
+        with_attached_type_module t.level m t1 env ~f:(fun env ->
           build_subtype env visited loops posi level t2 )
       in
       let c = max c1 c2 in
@@ -4327,7 +4328,8 @@ let rec subtype_rec env trace t1 t2 cstrs =
           in
           Subst.type_expr m2_subst u2
         in
-        with_attached_type_module m1 t1 env ~f:(fun env ->
+        let level = min t1.level t2.level in
+        with_attached_type_module level m1 t1 env ~f:(fun env ->
           subtype_rec env (Trace.diff u1 u2::trace) u1 u2' cstrs )
     | (Tarrow(l1, t1, u1, _), Tarrow(l2, t2, u2, _)) when l1 = l2
       || !Clflags.classic && not (is_optional l1 || is_optional l2) ->
