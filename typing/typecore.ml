@@ -2091,7 +2091,8 @@ let create_package_type loc env (p, l) =
 
 let rec approx_type env sty =
   match sty.ptyp_desc with
-    Ptyp_arrow (p, _, sty) ->
+    Ptyp_arrow (Module _, _, _) -> newvar ()
+  | Ptyp_arrow (p, _, sty) ->
       let ty1 = if is_optional p then type_option (newvar ()) else newvar () in
       let p = map_arg_label ~f:Ident.create_type_module p in
       newty (Tarrow (p, ty1, approx_type env sty, Cok))
@@ -2111,20 +2112,7 @@ let rec approx_type env sty =
 let rec type_approx env sexp =
   match sexp.pexp_desc with
     Pexp_let (_, _, e) -> type_approx env e
-  | Pexp_fun (Module m, None, {ppat_desc= Ppat_constraint (_,
-      {ptyp_desc= Ptyp_package (lid, binds); ptyp_loc= loc; _}) ; _}, e) ->
-      let id = Ident.create_type_module m.txt in
-      let binds = List.map (fun (name, x) -> (name.txt, x)) binds in
-      let _, _, ty = create_package_type loc env (lid.txt, binds) in
-      let mty =
-        match ty.desc with
-        | Tpackage (path, names, args) ->
-            !Ctype.modtype_of_package env path names args
-        | _ -> assert false
-      in
-      let env = Env.add_module id Mp_present mty env in
-      newty (Tarrow (Module id, ty, type_approx env e, Cok))
-  | Pexp_fun (Module _, _, _, _) -> assert false
+  | Pexp_fun (Module _, _, _, _) -> newvar ()
   | Pexp_fun (p, _, _, e) ->
       let ty = if is_optional p then type_option (newvar ()) else newvar () in
       let p = map_arg_label p ~f:(fun _ -> assert false) in
