@@ -250,6 +250,41 @@ end
 module Carries_type_module_fn : Carries_type_module_fn
 |}]
 
+let escape_check (x : 'a) {module M : Monad} = M.map x ~f:(fun x -> 15);
+
+[%%expect{|
+Line 1, characters 53-54:
+1 | let escape_check (x : 'a) {module M : Monad} = M.map x ~f:(fun x -> 15);
+                                                         ^
+Error: This expression has type 'a but an expression was expected of type
+         'b M.t
+       The type constructor M.t would escape its scope
+|}]
+
+let reference = ref None
+
+let reference_escape_check {module M : Monad} x =
+  reference := Some (M.return x)
+
+[%%expect{|
+val reference : '_weak3 option ref = {contents = None}
+Line 4, characters 20-32:
+4 |   reference := Some (M.return x)
+                        ^^^^^^^^^^^^
+Error: This expression has type 'a M.t but an expression was expected of type
+         'weak3
+       The type constructor M.t would escape its scope
+|}]
+
+let modules_lambdas_compose {module M : Monad} =
+  (fun {module M : Monad} (f : {M : Monad} -> 'a -> 'a M.t) ->
+      f {module M})
+    {module M} (fun {module M : Monad} x -> M.return x);;
+
+[%%expect{|
+val modules_lambdas_compose : {M : Monad} -> 'a -> 'a M.t = <fun>
+|}]
+
 let monad_test {module M : Monad} x f1 f2 =
   M.bind ~f:f1 (M.map ~f:f2 (M.return x));;
 
