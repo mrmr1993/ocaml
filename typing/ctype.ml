@@ -2726,7 +2726,8 @@ and unify3 env t1 t1' t2 t2' =
           let scope = Ident.scope m1 in
           let level = min (repr u1).level (repr u2).level in
           set_type_module_scope m1 level;
-          link_type u2 u2';
+          if u2 <> u2' then
+            link_type u2 u2';
           update_level !env_new level u2';
           unify env_new u1 u2;
           set_type_module_scope m1 scope;
