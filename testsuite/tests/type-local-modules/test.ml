@@ -375,3 +375,60 @@ Line 1, characters 41-72:
 Error: This function should have type 'a -> 'b -> 'b
        but its first argument is a module
 |}]
+
+type 'a record = {f : {M : Monad} -> 'a -> 'a M.t};;
+
+[%%expect{|
+type 'a record = { f : {M : Monad} -> 'a -> 'a M.t; }
+|}]
+
+let apply_to_record {module M : Monad} {f} x = f {module M} x;;
+
+[%%expect{|
+val apply_to_record : {M : Monad} -> 'a record -> 'a -> 'a M.t = <fun>
+|}]
+
+let create_record = {f= fun {module M : Monad} -> M.return};;
+
+[%%expect{|
+val create_record : 'a record = {f = <fun>}
+|}]
+
+let disallowed_record = {f= fun {module M : Monad} -> M.bind ~f:(fun x -> x)};;
+
+[%%expect{|
+Line 1, characters 54-76:
+1 | let disallowed_record = {f= fun {module M : Monad} -> M.bind ~f:(fun x -> x)};;
+                                                          ^^^^^^^^^^^^^^^^^^^^^^
+Error: This expression has type {M : Monad} -> 'a M.t M.t -> 'a M.t
+       but an expression was expected of type {M : Monad} -> 'b -> 'b M.t
+       The type constructor M.t would escape its scope
+|}]
+
+type poly_record = {f_poly : 'a. {M : Monad} -> 'a -> 'a M.t};;
+
+[%%expect{|
+type poly_record = { f_poly : 'a. {M : Monad} -> 'a -> 'a M.t; }
+|}]
+
+let apply_to_poly_record {module M : Monad} {f_poly} x = f_poly {module M} x;;
+
+[%%expect{|
+val apply_to_poly_record : {M : Monad} -> poly_record -> 'a -> 'a M.t = <fun>
+|}]
+
+let create_poly_record = {f_poly= fun {module M : Monad} -> M.return};;
+
+[%%expect{|
+val create_poly_record : poly_record = {f_poly = <fun>}
+|}]
+
+let must_apply_path (f : {M : Monad} -> 'a) = f (module Option);;
+
+[%%expect{|
+Line 1, characters 48-63:
+1 | let must_apply_path (f : {M : Monad} -> 'a) = f (module Option);;
+                                                    ^^^^^^^^^^^^^^^
+Error: The function applied to this argument has type {M : Monad} -> 'a
+This argument cannot be applied without label
+|}]
