@@ -3893,7 +3893,10 @@ and type_module_function ?in_function loc attrs env ty_expected_explained m
     in
     if !Clflags.principal then begin
       let ty_res' = instance ty_res in
-      List.iter (fun c -> unify_exp env c.c_rhs ty_res') cases
+      with_attached_type_module (get_current_level()) id ty_arg' env
+        ~f:(fun env ->
+          let env = Env.unset_type_local_module id env in
+          List.iter (fun c -> unify_exp env c.c_rhs ty_res') cases)
     end;
     let do_init = true in
     let ty_arg_check =
