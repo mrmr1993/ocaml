@@ -3738,7 +3738,7 @@ and type_module_function ?in_function loc attrs env ty_expected_explained m
     List.iter (fun f -> f()) force;
     (* Post-processing and generalization *)
     if take_partial_instance <> None then
-      unify_pat_types pat.pat_loc env ty_arg (instance ty_arg);
+      unify_pat_types pat.pat_loc (ref env) ty_arg (instance ty_arg);
     unify_var env (newvar ()) pv.pv_type;
     (pat, pv, unpack)
   in
