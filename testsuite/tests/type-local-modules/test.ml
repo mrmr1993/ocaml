@@ -216,7 +216,9 @@ module type Carries_sig = sig type t module type S end
 module Carries_monad : sig type t = int module type S = Monad end
 |}]
 
-let carries_param {module T : Carries_sig} (f : (module T.S) -> T.t) (x : (module T.S)) = f x;;
+let carries_param {module T : Carries_sig} (f : (module T.S) -> T.t)
+    (x : (module T.S)) =
+  f x;;
 
 [%%expect{|
 val carries_param :

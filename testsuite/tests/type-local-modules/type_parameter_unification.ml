@@ -35,7 +35,8 @@ val unify_parameters : ({M : Monad} -> int M.t -> int M.t) -> int module_args =
   <fun>
 |}]
 
-let unify_parameters_fail (x : {M : Monad} -> int M.t -> bool M.t) : _ module_args = x;;
+let unify_parameters_fail
+  (x : {M : Monad} -> int M.t -> bool M.t) : _ module_args = x;;
 
 [%%expect{|
 
@@ -43,9 +44,9 @@ let unify_parameters_fail (x : {M : Monad} -> int M.t -> bool M.t) : _ module_ar
 
 
 
-Line 1, characters 85-86:
-1 | let unify_parameters_fail (x : {M : Monad} -> int M.t -> bool M.t) : _ module_args = x;;
-                                                                                         ^
+Line 2, characters 61-62:
+2 |   (x : {M : Monad} -> int M.t -> bool M.t) : _ module_args = x;;
+                                                                 ^
 Error: This expression has type {M/1 : Monad} -> int M/1.t -> bool M/1.t
        but an expression was expected of type
          int module_args = {M/2 : Monad} -> int M/2.t -> int M/2.t
