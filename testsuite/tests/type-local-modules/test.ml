@@ -42,21 +42,21 @@ end;;
 module Int = struct
   type 'a t = int
 
-  let map x ~f:_ = x + 1
+  let map x ~f:_ = x * 3
 
   let bind x ~f:_ = x + 2
 
-  let return _ = 0
+  let return _ = 1
 end;;
 
 module Float = struct
   type 'a t = float
 
-  let map x ~f:_ = x +. 1.
+  let map x ~f:_ = x *. 3.
 
   let bind x ~f:_ = x +. 2.
 
-  let return _ = 0.
+  let return _ = 1.
 end;;
 
 [%%expect{|
@@ -138,9 +138,6 @@ type 'a module_param = {M : Monad} -> 'a
 let no_escape_variable (x : {M : Monad} -> _ M.t) : _ module_param = x;;
 
 [%%expect{|
-
-
-
 Line 1, characters 69-70:
 1 | let no_escape_variable (x : {M : Monad} -> _ M.t) : _ module_param = x;;
                                                                          ^
@@ -251,4 +248,41 @@ end
 
 [%%expect{|
 module Carries_type_module_fn : Carries_type_module_fn
+|}]
+
+let monad_test {module M : Monad} x f1 f2 =
+  M.bind ~f:f1 (M.map ~f:f2 (M.return x));;
+
+[%%expect{|
+val monad_test : {M : Monad} -> 'a -> ('b -> 'c M.t) -> ('a -> 'b) -> 'c M.t =
+  <fun>
+|}]
+
+let monad_option_test =
+  monad_test {module Option} 1 (fun x -> Some (25 + x)) ((+) 15);;
+
+[%%expect{|
+val monad_option_test : int Option.t = Some 41
+|}]
+
+let monad_list =
+  let rec list_init i j = if j > 0 then i :: list_init (i+1) (j-1) else [] in
+  monad_test {module List} 1 (list_init 1) ((+) 15);;
+
+[%%expect{|
+val monad_list : int List.t =
+  [1; 2; 3; 4; 5; 6; 7; 8; 9; 10; 11; 12; 13; 14; 15; 16]
+|}]
+
+let monad_int_test = monad_test {module Int} 1 (fun x -> 30) ((+) 15);;
+
+[%%expect{|
+val monad_int_test : 'a Int.t = 5
+|}]
+
+let monad_float_test =
+  monad_test {module Float} 1 (fun x -> float_of_int x) ((+) 15);;
+
+[%%expect{|
+val monad_float_test : 'a Float.t = 5.
 |}]

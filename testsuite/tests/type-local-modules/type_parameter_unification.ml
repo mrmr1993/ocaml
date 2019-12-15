@@ -39,11 +39,6 @@ let unify_parameters_fail
   (x : {M : Monad} -> int M.t -> bool M.t) : _ module_args = x;;
 
 [%%expect{|
-
-
-
-
-
 Line 2, characters 61-62:
 2 |   (x : {M : Monad} -> int M.t -> bool M.t) : _ module_args = x;;
                                                                  ^
