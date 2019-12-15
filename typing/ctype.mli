@@ -158,6 +158,15 @@ val merge_row_fields:
 val filter_row_fields:
         bool -> (label * row_field) list -> (label * row_field) list
 
+val with_attached_type_module:
+        ?marked:bool -> Ident.t -> type_expr -> Env.t -> f:(Env.t -> 'a) -> 'a
+(** Evaluate the argument [f] in an environment with the module type packaged
+    in the [type_expr] argument attached at the given [Ident.t].
+
+    This may be used to help generate an evironment for evaluating [u] when
+    iterating through a [Tarrow(Module m, t, u, _)] type.
+*)
+
 val generalize: type_expr -> unit
         (* Generalize in-place the given type *)
 val lower_contravariant: Env.t -> type_expr -> unit
@@ -370,7 +379,5 @@ val package_subtype :
       Path.t -> Longident.t list -> type_expr list -> bool) ref
 val modtype_of_package :
     (Env.t -> Path.t -> Longident.t list -> type_expr list -> module_type) ref
-val modtype_includes :
-    (Env.t -> module_type -> module_type -> bool) ref
 
 val mcomp : Env.t -> type_expr -> type_expr -> unit

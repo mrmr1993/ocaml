@@ -523,6 +523,32 @@ let rec filter_row_fields erase = function
       | Reither(_,_,false,e) when erase -> set_row_field e Rabsent; fi
       | _ -> p :: fi
 
+                   (****************************************)
+                   (*  Utility functions for type modules  *)
+                   (****************************************)
+
+let modtype_of_package = ref (fun _ _ _ _ -> assert false)
+
+let with_attached_type_module ?(marked = false) m t env ~f =
+  let mty =
+    match (repr t).desc with
+    | Tpackage (p, n, tl) -> !modtype_of_package env p n tl
+    | _ -> assert false
+  in
+  let scope = Ident.scope m in
+  set_type_module_scope m (repr t).level;
+  let env =
+    if marked then
+      Env.add_module m Mp_present mty env
+    else
+      Env.add_type_local_module m Mp_present mty env
+  in
+  try
+    let ret = f env in
+    set_type_module_scope m scope;
+    ret
+  with exn -> set_type_module_scope m scope; raise exn
+
                     (**************************************)
                     (*  Check genericity of type schemes  *)
                     (**************************************)
@@ -560,6 +586,12 @@ let rec free_vars_rec real ty =
         let row = row_repr row in
         iter_row (free_vars_rec true) row;
         if not (static_row row) then free_vars_rec false row.row_more
+    | Tarrow (Module m, t, u, _), Some env ->
+        free_vars_rec true t;
+        with_attached_type_module m t env ~f:(fun env ->
+          really_closed := Some env;
+          free_vars_rec true u);
+        really_closed := Some env
     | _    ->
         iter_type_expr (free_vars_rec true) ty
     end;
@@ -759,9 +791,6 @@ let rec generalize_spine ty =
 let forward_try_expand_once = (* Forward declaration *)
   ref (fun _env _ty -> raise Cannot_expand)
 
-let modtype_of_package = ref (fun _ _ _ _ -> assert false)
-let modtype_includes = ref (fun _ _ _ -> assert false)
-
 (*
    Lower the levels of a type (assume [level] is not
    [generic_level]).
@@ -803,16 +832,8 @@ let check_scope_escape env level ty =
           aux { ty with desc = Tpackage (p', nl, tl) }
       | Tarrow (Module m, t, u, _) ->
           loop env level t;
-          let mty =
-            match (repr t).desc with
-            | Tpackage (p, n, tl) -> !modtype_of_package env p n tl
-            | _ -> assert false
-          in
-          let scope = Ident.scope m in
-          set_type_module_scope m level;
-          let env = Env.add_module m Mp_present mty env in
-          loop env level u;
-          set_type_module_scope m scope
+          with_attached_type_module m t env ~f:(fun env ->
+            loop env level u)
       | _ ->
         iter_type_expr (loop env level) ty
       end;
@@ -894,16 +915,8 @@ let rec update_level env level expand ty =
     | Tarrow (Module m, t, u, _) ->
         set_level ty level;
         update_level env level expand t;
-        let mty =
-          match (repr t).desc with
-          | Tpackage (p, n, tl) -> !modtype_of_package env p n tl
-          | _ -> assert false
-        in
-        let scope = Ident.scope m in
-        set_type_module_scope m level;
-        let env = Env.add_module m Mp_present mty env in
-        update_level env level expand u;
-        set_type_module_scope m scope
+        with_attached_type_module m t env ~f:(fun env ->
+          update_level env level expand u)
     | _ ->
         set_level ty level;
         (* XXX what about abbreviations in Tconstr ? *)
@@ -966,6 +979,10 @@ let rec lower_contravariant env var_level visited contra ty =
           else not_expanded ()
     | Tpackage (_, _, tyl) ->
         List.iter (lower_rec true) tyl
+    | Tarrow (Module m, t, u, _) ->
+        lower_rec true t;
+        with_attached_type_module m t env ~f:(fun env ->
+          lower_contravariant env var_level visited contra u)
     | Tarrow (_, t1, t2, _) ->
         lower_rec true t1;
         lower_rec contra t2
@@ -1789,6 +1806,13 @@ let rec occur_rec env allow_recursive visited ty0 = function
       end
   | Tobject _ | Tvariant _ ->
       ()
+  | Tarrow (Module m, t, u, _) ->
+      if allow_recursive ||  TypeSet.mem ty visited then () else begin
+        let visited = TypeSet.add ty visited in
+        occur_rec env allow_recursive visited ty0 t;
+        with_attached_type_module m t env ~f:(fun env ->
+          occur_rec env allow_recursive visited ty0 u)
+      end
   | _ ->
       if allow_recursive ||  TypeSet.mem ty visited then () else begin
         let visited = TypeSet.add ty visited in
@@ -1846,6 +1870,13 @@ let rec local_non_recursive_abbrev strict visited env p ty =
               let strict = strict || not (is_Tvar (repr tv)) in
               local_non_recursive_abbrev strict visited env p ty)
             params args
+        end
+    | Tarrow (Module m, t, u, _) ->
+        if strict then begin
+          let visited = ty :: visited in
+          local_non_recursive_abbrev true visited env p t;
+          with_attached_type_module m t env ~f:(fun env ->
+            local_non_recursive_abbrev true visited env p u)
         end
     | _ ->
         if strict then (* PR#7374 *)
@@ -1937,17 +1968,9 @@ let occur_univar env ty =
           end
       | Tarrow (Module m, t, u, _) ->
           occur_rec env bound t;
-          let mty =
-            match (repr t).desc with
-            | Tpackage (p, n, tl) -> !modtype_of_package env p n tl
-            | _ -> assert false
-          in
-          let scope = Ident.scope m in
-          set_type_module_scope m ty.level;
-          let env = Env.add_module m Mp_present mty env in
-          let env = Env.unset_type_local_module m env in
-          occur_rec env bound u;
-          set_type_module_scope m scope
+          with_attached_type_module m t env ~f:(fun env ->
+            let env = Env.unset_type_local_module m env in
+            occur_rec env bound u)
       | _ -> iter_type_expr (occur_rec env bound) ty
   in
   Misc.try_finally (fun () ->
@@ -1975,14 +1998,14 @@ let get_univar_family univar_pairs univars =
 let univars_escape env univar_pairs vl ty =
   let family = get_univar_family univar_pairs vl in
   let visited = ref TypeSet.empty in
-  let rec occur t =
+  let rec occur env t =
     let t = repr t in
     if TypeSet.mem t !visited then () else begin
       visited := TypeSet.add t !visited;
       match t.desc with
         Tpoly (t, tl) ->
           if List.exists (fun t -> TypeSet.mem (repr t) family) tl then ()
-          else occur t
+          else occur env t
       | Tunivar _ ->
           if TypeSet.mem t family then raise Trace.(Unify [escape(Univ t)])
       | Tconstr (_, [], _) -> ()
@@ -1991,16 +2014,21 @@ let univars_escape env univar_pairs vl ty =
             let td = Env.find_type p env in
             List.iter2
               (fun t v ->
-                if Variance.(mem May_pos v || mem May_neg v) then occur t)
+                if Variance.(mem May_pos v || mem May_neg v) then occur env t)
               tl td.type_variance
           with Not_found ->
-            List.iter occur tl
+            List.iter (occur env) tl
           end
+      | Tarrow (Module m, t, u, _) ->
+          occur env t;
+          with_attached_type_module m t env ~f:(fun env ->
+            let env = Env.unset_type_local_module m env in
+            occur env u)
       | _ ->
-          iter_type_expr occur t
+          iter_type_expr (occur env) t
     end
   in
-  occur ty
+  occur env ty
 
 (* Wrapper checking that no variable escapes and updating univar_pairs *)
 let enter_poly env univar_pairs t1 tl1 t2 tl2 f =
@@ -2247,6 +2275,11 @@ let rec mcomp type_pairs env t1 t2 =
         | (Tvar _, _)
         | (_, Tvar _)  ->
             ()
+        | (Tarrow (Module m1, t1, u1, _), Tarrow (Module m2, t2, u2, _)) ->
+            mcomp type_pairs env t1 t2;
+            with_attached_type_module m1 t1 env ~f:(fun env ->
+              with_attached_type_module m2 t2 env ~f:(fun env ->
+                mcomp type_pairs env u1 u2))
         | (Tarrow (l1, t1, u1, _), Tarrow (l2, t2, u2, _))
           when l1 = l2 || not (is_optional l1 || is_optional l2) ->
             mcomp type_pairs env t1 t2;
@@ -2678,8 +2711,6 @@ and unify3 env t1 t1' t2 t2' =
             let m2_subst = Subst.add_module m2 (Pident m1) Subst.identity in
             Subst.type_expr m2_subst u2
           in
-          link_type u2 u2';
-          set_level u2' (repr u1).level;
           set_type_desc t2' (Tarrow (Module m1, t2, u2', c2));
           let mty1 =
             match (repr t1).desc with
@@ -2693,6 +2724,8 @@ and unify3 env t1 t1' t2 t2' =
           let scope = Ident.scope m1 in
           let level = min (repr u1).level (repr u2).level in
           set_type_module_scope m1 level;
+          link_type u2 u2';
+          update_level !env_new level u2';
           unify env_new u1 u2;
           set_type_module_scope m1 scope;
           env := Env.copy_local ~from:!env_new !env;
@@ -3303,6 +3336,18 @@ let rec moregen inst_nongen type_pairs env t1 t2 =
               moregen_occur env t1'.level t2;
               update_scope t1'.scope t2;
               link_type t1' t2
+          | (Tarrow (Module m1, t1, u1, _), Tarrow (Module m2, t2, u2, _)) ->
+              moregen inst_nongen type_pairs env t1 t2;
+              let u2' =
+                let m2_subst =
+                  Subst.add_module m2 (Pident m1) Subst.identity
+                in
+                Subst.type_expr m2_subst u2
+              in
+              with_attached_type_module m1 t1 env ~f:(fun env ->
+                with_attached_type_module m2 t2 env ~f:(fun env ->
+                  update_level env (repr u2).level u2';
+                  moregen inst_nongen type_pairs env u1 u2 ))
           | (Tarrow (l1, t1, u1, _), Tarrow (l2, t2, u2, _)) when l1 = l2
             || !Clflags.classic && not (is_optional l1 || is_optional l2) ->
               moregen inst_nongen type_pairs env t1 t2;
@@ -3575,6 +3620,18 @@ let rec eqtype rename type_pairs subst env t1 t2 =
                 then raise (Unify []);
                 subst := (t1', t2') :: !subst
               end
+          | (Tarrow (Module m1, t1, u1, _), Tarrow (Module m2, t2, u2, _)) ->
+              eqtype rename type_pairs subst env t1 t2;
+              let u2' =
+                let m2_subst =
+                  Subst.add_module m2 (Pident m1) Subst.identity
+                in
+                Subst.type_expr m2_subst u2
+              in
+              with_attached_type_module m1 t1 env ~f:(fun env ->
+                with_attached_type_module m2 t2 env ~f:(fun env ->
+                  update_level env (repr u2).level u2';
+                  eqtype rename type_pairs subst env u1 u2' ))
           | (Tarrow (l1, t1, u1, _), Tarrow (l2, t2, u2, _)) when l1 = l2
             || !Clflags.classic && not (is_optional l1 || is_optional l2) ->
               eqtype rename type_pairs subst env t1 t2;
@@ -4063,6 +4120,17 @@ let rec build_subtype env visited loops posi level t =
           (t, Unchanged)
       else
         (t, Unchanged)
+  | Tarrow(Module m, t1, t2, _) ->
+      if memq_warn t visited then (t, Unchanged) else
+      let visited = t :: visited in
+      let (t1', c1) = build_subtype env visited loops (not posi) level t1 in
+      let (t2', c2) =
+        with_attached_type_module m t1 env ~f:(fun env ->
+          build_subtype env visited loops posi level t2 )
+      in
+      let c = max c1 c2 in
+      if c > Unchanged then (newty (Tarrow(Module m, t1', t2', Cok)), c)
+      else (t, Unchanged)
   | Tarrow(l, t1, t2, _) ->
       if memq_warn t visited then (t, Unchanged) else
       let visited = t :: visited in
@@ -4251,6 +4319,16 @@ let rec subtype_rec env trace t1 t2 cstrs =
     match (t1.desc, t2.desc) with
       (Tvar _, _) | (_, Tvar _) ->
         (trace, t1, t2, !univar_pairs)::cstrs
+    | (Tarrow(Module m1, t1, u1, _), Tarrow(Module m2, t2, u2, _)) ->
+        let cstrs = subtype_rec env (Trace.diff t2 t1::trace) t2 t1 cstrs in
+        let u2' =
+          let m2_subst =
+            Subst.add_module m2 (Pident m1) Subst.identity
+          in
+          Subst.type_expr m2_subst u2
+        in
+        with_attached_type_module m1 t1 env ~f:(fun env ->
+          subtype_rec env (Trace.diff u1 u2::trace) u1 u2' cstrs )
     | (Tarrow(l1, t1, u1, _), Tarrow(l2, t2, u2, _)) when l1 = l2
       || !Clflags.classic && not (is_optional l1 || is_optional l2) ->
         let cstrs = subtype_rec env (Trace.diff t2 t1::trace) t2 t1 cstrs in

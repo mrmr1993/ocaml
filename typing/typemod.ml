@@ -1841,13 +1841,6 @@ let () =
   in
   Ctype.modtype_of_package := mkmty
 
-let () =
-  let modtype_includes env mty1 mty2 =
-    try Includemod.modtypes ~loc:Location.none env mty1 mty2 = Tcoerce_none
-    with Includemod.Error _msg -> false
-  in
-  Ctype.modtype_includes := modtype_includes
-
 let wrap_constraint env mark arg mty explicit =
   let mark = if mark then Includemod.Mark_both else Includemod.Mark_neither in
   let coercion =
