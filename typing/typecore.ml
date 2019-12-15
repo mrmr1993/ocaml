@@ -5451,6 +5451,7 @@ let report_error ~loc env = function
   | Abstract_wrong_label (l, ty, explanation) ->
       let label_mark = function
         | Nolabel -> "but its first argument is not labelled"
+        | Asttypes.Module _ -> "but its first argument is a module"
         | l -> sprintf "but its first argument is labelled %s"
                        (prefixed_label_name l) in
       Location.errorf ~loc
