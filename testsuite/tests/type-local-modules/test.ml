@@ -321,3 +321,57 @@ let monad_float_test =
 [%%expect{|
 val monad_float_test : 'a Float.t = 5.
 |}]
+
+class ['a, 'b] monad = object
+  method map {module M : Monad} (x : 'a M.t) ~(f : 'a -> 'b) =
+    M.map x ~f
+  method bind {module M : Monad} (x : 'a M.t) ~(f : 'a -> 'b M.t) =
+    M.bind x ~f
+  method return {module M : Monad} (x : 'a) = M.return x
+end;;
+
+[%%expect{|
+class ['a, 'b] monad :
+  object
+    method bind : {M/1 : Monad} -> 'a M/1.t -> f:('a -> 'b M/1.t) -> 'b M/1.t
+    method map : {M/2 : Monad} -> 'a M/2.t -> f:('a -> 'b) -> 'b M/2.t
+    method return : {M/3 : Monad} -> 'a -> 'a M/3.t
+  end
+|}]
+
+let test_class =
+  let m = new monad in
+  m#map {module Option} (m#return {module Option} 15) ~f:((+) 8);;
+
+[%%expect{|
+val test_class : int Option.t = Some 23
+|}]
+
+class ['a, 'b] module_class_parameter {module M : Monad} = object end;;
+
+[%%expect{|
+Line 1, characters 38-56:
+1 | class ['a, 'b] module_class_parameter {module M : Monad} = object end;;
+                                          ^^^^^^^^^^^^^^^^^^
+Error: Modules are not allowed in this pattern.
+|}]
+
+let () = (fun (f : {M : Monad} -> 'a -> 'a) -> f) (fun x y -> y);;
+
+[%%expect{|
+Line 1, characters 50-64:
+1 | let () = (fun (f : {M : Monad} -> 'a -> 'a) -> f) (fun x y -> y);;
+                                                      ^^^^^^^^^^^^^^
+Error: This function should have type {M : Monad} -> 'a -> 'a
+       but its first argument is not labelled
+|}]
+
+let () = (fun (f : 'a -> 'b -> 'b) -> f) (fun {module M : Monad} y -> y);;
+
+[%%expect{|
+Line 1, characters 41-72:
+1 | let () = (fun (f : 'a -> 'b -> 'b) -> f) (fun {module M : Monad} y -> y);;
+                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error: This function should have type 'a -> 'b -> 'b
+       but its first argument is a module
+|}]
