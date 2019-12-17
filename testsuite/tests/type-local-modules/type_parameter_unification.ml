@@ -122,3 +122,32 @@ Error: This pattern matches values of type ({M : Monad} -> 'a) add_module
          ({M : Monad} -> 'b M.t -> 'c) add_module
        The type constructor M.t would escape its scope
 |}]
+
+type ('a, 'b) row = ([> `A of 'a] as 'b);;
+
+[%%expect{|
+type ('a, 'b) row = 'b constraint 'b = [> `A of 'a ]
+|}]
+
+let no_escape_row (x : 'a) {M : Monad} (x : (int M.t, 'a) row) (y : 'a) = x, y;;
+
+[%%expect{|
+val no_escape_row :
+  'a ->
+  {M : Monad} ->
+  (int M.t, [> `A of int M.t ] as 'b) row -> 'a -> (int M.t, 'b) row * 'a =
+  <fun>
+|}]
+
+let no_escape_row_param
+  (f : {M : Monad} -> (int M.t, 'b) row -> (int M.t, 'b) row) x =
+  fun {M : Monad} -> f {M} x;;
+
+[%%expect{|
+Line 3, characters 27-28:
+3 |   fun {M : Monad} -> f {M} x;;
+                               ^
+Error: This expression has type 'a but an expression was expected of type
+         [> `A of int M.t ]
+       The type constructor M.t would escape its scope
+|}]
