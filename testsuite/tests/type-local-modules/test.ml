@@ -147,14 +147,14 @@ Error: This expression has type {M : Monad} -> 'a M.t
        The type constructor M.t would escape its scope
 |}]
 
-let apply_option_module (f : {M : Monad} -> 'a M.t -> int M.t) = f {module Option};;
+let apply_option_module (f : {M : Monad} -> 'a M.t -> int M.t) = f {Option};;
 
 [%%expect{|
 val apply_option_module :
   ({M : Monad} -> 'a M.t -> int M.t) -> 'a Option.t -> int Option.t = <fun>
 |}]
 
-let apply_int_module (f : {M : Monad} -> 'a M.t -> int M.t) = f {module Int};;
+let apply_int_module (f : {M : Monad} -> 'a M.t -> int M.t) = f {Int};;
 
 [%%expect{|
 val apply_int_module : ({M : Monad} -> 'a M.t -> int M.t) -> 'a Int.t -> int =
@@ -162,7 +162,7 @@ val apply_int_module : ({M : Monad} -> 'a M.t -> int M.t) -> 'a Int.t -> int =
 |}]
 
 let apply_full_option_module (f : {M : Monad} -> 'a M.t -> int M.t) =
-  f {module Option} (Some true);;
+  f {Option} (Some true);;
 
 [%%expect{|
 val apply_full_option_module :
@@ -170,27 +170,27 @@ val apply_full_option_module :
 |}]
 
 let apply_int_module (f : {M : Monad} -> 'a M.t -> int M.t) =
-  f {module Int} 15;;
+  f {Int} 15;;
 
 [%%expect{|
 val apply_int_module : ({M : Monad} -> 'a M.t -> int M.t) -> int = <fun>
 |}]
 
-let new_fun {module M : Monad} (x : 'a M.t) (y : 'b M.t) =
+let new_fun {M : Monad} (x : 'a M.t) (y : 'b M.t) =
   M.bind x ~f:(fun x -> M.map y ~f:(fun y -> (x, y)))
 
 [%%expect{|
 val new_fun : {M : Monad} -> 'a M.t -> 'b M.t -> ('a * 'b) M.t = <fun>
 |}]
 
-let new_fun_list_weak = new_fun {module List};;
+let new_fun_list_weak = new_fun {List};;
 
 [%%expect{|
 val new_fun_list_weak :
   '_weak1 List.t -> '_weak2 List.t -> ('_weak1 * '_weak2) List.t = <fun>
 |}]
 
-let new_fun_list x y = new_fun {module List} x y;;
+let new_fun_list x y = new_fun {List} x y;;
 
 [%%expect{|
 val new_fun_list : 'a List.t -> 'b List.t -> ('a * 'b) List.t = <fun>
@@ -213,7 +213,7 @@ module type Carries_sig = sig type t module type S end
 module Carries_monad : sig type t = int module type S = Monad end
 |}]
 
-let carries_param {module T : Carries_sig} (f : (module T.S) -> T.t)
+let carries_param {T : Carries_sig} (f : (module T.S) -> T.t)
     (x : (module T.S)) =
   f x;;
 
@@ -223,7 +223,7 @@ val carries_param :
 |}]
 
 let apply_carries_param =
-  carries_param {module Carries_monad} (fun (module M : Carries_monad.S) ->
+  carries_param {Carries_monad} (fun (module M : Carries_monad.S) ->
     let x = ref 80 in
     let y = M.return 15 in
     ignore @@ M.map y ~f:(fun y -> x := !x + y; y);
@@ -243,19 +243,19 @@ module type Carries_type_module_fn =
 |}]
 
 module Carries_type_module_fn : Carries_type_module_fn = struct
-  let bind {module M : Monad} = M.bind
+  let bind {M : Monad} = M.bind
 end
 
 [%%expect{|
 module Carries_type_module_fn : Carries_type_module_fn
 |}]
 
-let escape_check (x : 'a) {module M : Monad} = M.map x ~f:(fun x -> 15);
+let escape_check (x : 'a) {M : Monad} = M.map x ~f:(fun x -> 15);
 
 [%%expect{|
-Line 1, characters 53-54:
-1 | let escape_check (x : 'a) {module M : Monad} = M.map x ~f:(fun x -> 15);
-                                                         ^
+Line 1, characters 46-47:
+1 | let escape_check (x : 'a) {M : Monad} = M.map x ~f:(fun x -> 15);
+                                                  ^
 Error: This expression has type 'a but an expression was expected of type
          'b M.t
        The type constructor M.t would escape its scope
@@ -263,7 +263,7 @@ Error: This expression has type 'a but an expression was expected of type
 
 let reference = ref None
 
-let reference_escape_check {module M : Monad} x =
+let reference_escape_check {M : Monad} x =
   reference := Some (M.return x)
 
 [%%expect{|
@@ -276,16 +276,16 @@ Error: This expression has type 'a M.t but an expression was expected of type
        The type constructor M.t would escape its scope
 |}]
 
-let modules_lambdas_compose {module M : Monad} =
-  (fun {module M : Monad} (f : {M : Monad} -> 'a -> 'a M.t) ->
-      f {module M})
-    {module M} (fun {module M : Monad} x -> M.return x);;
+let modules_lambdas_compose {M : Monad} =
+  (fun {M : Monad} (f : {M : Monad} -> 'a -> 'a M.t) ->
+      f {M})
+    {M} (fun {M : Monad} x -> M.return x);;
 
 [%%expect{|
 val modules_lambdas_compose : {M : Monad} -> 'a -> 'a M.t = <fun>
 |}]
 
-let monad_test {module M : Monad} x f1 f2 =
+let monad_test {M : Monad} x f1 f2 =
   M.bind ~f:f1 (M.map ~f:f2 (M.return x));;
 
 [%%expect{|
@@ -294,7 +294,7 @@ val monad_test : {M : Monad} -> 'a -> ('b -> 'c M.t) -> ('a -> 'b) -> 'c M.t =
 |}]
 
 let monad_option_test =
-  monad_test {module Option} 1 (fun x -> Some (25 + x)) ((+) 15);;
+  monad_test {Option} 1 (fun x -> Some (25 + x)) ((+) 15);;
 
 [%%expect{|
 val monad_option_test : int Option.t = Some 41
@@ -302,32 +302,32 @@ val monad_option_test : int Option.t = Some 41
 
 let monad_list =
   let rec list_init i j = if j > 0 then i :: list_init (i+1) (j-1) else [] in
-  monad_test {module List} 1 (list_init 1) ((+) 15);;
+  monad_test {List} 1 (list_init 1) ((+) 15);;
 
 [%%expect{|
 val monad_list : int List.t =
   [1; 2; 3; 4; 5; 6; 7; 8; 9; 10; 11; 12; 13; 14; 15; 16]
 |}]
 
-let monad_int_test = monad_test {module Int} 1 (fun x -> 30) ((+) 15);;
+let monad_int_test = monad_test {Int} 1 (fun x -> 30) ((+) 15);;
 
 [%%expect{|
 val monad_int_test : 'a Int.t = 5
 |}]
 
 let monad_float_test =
-  monad_test {module Float} 1 (fun x -> float_of_int x) ((+) 15);;
+  monad_test {Float} 1 (fun x -> float_of_int x) ((+) 15);;
 
 [%%expect{|
 val monad_float_test : 'a Float.t = 5.
 |}]
 
 class ['a, 'b] monad = object
-  method map {module M : Monad} (x : 'a M.t) ~(f : 'a -> 'b) =
+  method map {M : Monad} (x : 'a M.t) ~(f : 'a -> 'b) =
     M.map x ~f
-  method bind {module M : Monad} (x : 'a M.t) ~(f : 'a -> 'b M.t) =
+  method bind {M : Monad} (x : 'a M.t) ~(f : 'a -> 'b M.t) =
     M.bind x ~f
-  method return {module M : Monad} (x : 'a) = M.return x
+  method return {M : Monad} (x : 'a) = M.return x
 end;;
 
 [%%expect{|
@@ -341,18 +341,18 @@ class ['a, 'b] monad :
 
 let test_class =
   let m = new monad in
-  m#map {module Option} (m#return {module Option} 15) ~f:((+) 8);;
+  m#map {Option} (m#return {Option} 15) ~f:((+) 8);;
 
 [%%expect{|
 val test_class : int Option.t = Some 23
 |}]
 
-class ['a, 'b] module_class_parameter {module M : Monad} = object end;;
+class ['a, 'b] module_class_parameter {M : Monad} = object end;;
 
 [%%expect{|
-Line 1, characters 38-56:
-1 | class ['a, 'b] module_class_parameter {module M : Monad} = object end;;
-                                          ^^^^^^^^^^^^^^^^^^
+Line 1, characters 38-49:
+1 | class ['a, 'b] module_class_parameter {M : Monad} = object end;;
+                                          ^^^^^^^^^^^
 Error: Modules are not allowed in this pattern.
 |}]
 
@@ -366,12 +366,12 @@ Error: This function should have type {M : Monad} -> 'a -> 'a
        but its first argument is not labelled
 |}]
 
-let () = (fun (f : 'a -> 'b -> 'b) -> f) (fun {module M : Monad} y -> y);;
+let () = (fun (f : 'a -> 'b -> 'b) -> f) (fun {M : Monad} y -> y);;
 
 [%%expect{|
-Line 1, characters 41-72:
-1 | let () = (fun (f : 'a -> 'b -> 'b) -> f) (fun {module M : Monad} y -> y);;
-                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Line 1, characters 41-65:
+1 | let () = (fun (f : 'a -> 'b -> 'b) -> f) (fun {M : Monad} y -> y);;
+                                             ^^^^^^^^^^^^^^^^^^^^^^^^
 Error: This function should have type 'a -> 'b -> 'b
        but its first argument is a module
 |}]
@@ -382,24 +382,24 @@ type 'a record = {f : {M : Monad} -> 'a -> 'a M.t};;
 type 'a record = { f : {M : Monad} -> 'a -> 'a M.t; }
 |}]
 
-let apply_to_record {module M : Monad} {f} x = f {module M} x;;
+let apply_to_record {M : Monad} {f} x = f {M} x;;
 
 [%%expect{|
 val apply_to_record : {M : Monad} -> 'a record -> 'a -> 'a M.t = <fun>
 |}]
 
-let create_record = {f= fun {module M : Monad} -> M.return};;
+let create_record = {f= fun {M : Monad} -> M.return};;
 
 [%%expect{|
 val create_record : 'a record = {f = <fun>}
 |}]
 
-let disallowed_record = {f= fun {module M : Monad} -> M.bind ~f:(fun x -> x)};;
+let disallowed_record = {f= fun {M : Monad} -> M.bind ~f:(fun x -> x)};;
 
 [%%expect{|
-Line 1, characters 54-76:
-1 | let disallowed_record = {f= fun {module M : Monad} -> M.bind ~f:(fun x -> x)};;
-                                                          ^^^^^^^^^^^^^^^^^^^^^^
+Line 1, characters 47-69:
+1 | let disallowed_record = {f= fun {M : Monad} -> M.bind ~f:(fun x -> x)};;
+                                                   ^^^^^^^^^^^^^^^^^^^^^^
 Error: This expression has type {M : Monad} -> 'a M.t M.t -> 'a M.t
        but an expression was expected of type {M : Monad} -> 'b -> 'b M.t
        The type constructor M.t would escape its scope
@@ -411,13 +411,13 @@ type poly_record = {f_poly : 'a. {M : Monad} -> 'a -> 'a M.t};;
 type poly_record = { f_poly : 'a. {M : Monad} -> 'a -> 'a M.t; }
 |}]
 
-let apply_to_poly_record {module M : Monad} {f_poly} x = f_poly {module M} x;;
+let apply_to_poly_record {M : Monad} {f_poly} x = f_poly {M} x;;
 
 [%%expect{|
 val apply_to_poly_record : {M : Monad} -> poly_record -> 'a -> 'a M.t = <fun>
 |}]
 
-let create_poly_record = {f_poly= fun {module M : Monad} -> M.return};;
+let create_poly_record = {f_poly= fun {M : Monad} -> M.return};;
 
 [%%expect{|
 val create_poly_record : poly_record = {f_poly = <fun>}

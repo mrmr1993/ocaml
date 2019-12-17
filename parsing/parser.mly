@@ -2055,7 +2055,7 @@ labeled_simple_pattern:
       { (Labelled (fst $2), None, snd $2) }
   | LABEL simple_pattern
       { (Labelled $1, None, $2) }
-  | LBRACE MODULE x = mkrhs(UIDENT) COLON pty = package_type RBRACE
+  | LBRACE x = mkrhs(UIDENT) COLON pty = package_type RBRACE
       { ( Module x
         , None
         , mkpat ~loc:$sloc
@@ -2375,10 +2375,10 @@ labeled_simple_expr:
         (Optional label, mkexpvar ~loc label) }
   | OPTLABEL simple_expr %prec below_HASH
       { (Optional $1, $2) }
-  | LBRACE MODULE x = mkrhs(mod_longident) RBRACE
+  | LBRACE x = mkrhs(mod_longident) RBRACE
       { ( Module x
         , mkexp ~loc:$sloc (Pexp_pack (ghmod ~loc:$sloc (Pmod_ident x))) ) }
-  | LBRACE MODULE x = mkrhs(mod_longident) COLON pty = package_type RBRACE
+  | LBRACE x = mkrhs(mod_longident) COLON pty = package_type RBRACE
       { ( Module x
         , mkexp ~loc:$sloc
             (Pexp_constraint

@@ -58,24 +58,24 @@ type ('a, 'b) constructor =
 |}]
 
 let failed_constructor_A : _ constructor =
-  A (fun {module M : Monad} -> M.return 15);;
+  A (fun {M : Monad} -> M.return 15);;
 
 [%%expect{|
-Line 2, characters 31-42:
-2 |   A (fun {module M : Monad} -> M.return 15);;
-                                   ^^^^^^^^^^^
+Line 2, characters 24-35:
+2 |   A (fun {M : Monad} -> M.return 15);;
+                            ^^^^^^^^^^^
 Error: This expression has type {M : Monad} -> int M.t
        but an expression was expected of type {M : Monad} -> 'a
        The type constructor M.t would escape its scope
 |}]
 
-let constructor_A : _ constructor = A (fun {module M : Monad} -> 15);;
+let constructor_A : _ constructor = A (fun {M : Monad} -> 15);;
 
 [%%expect{|
 val constructor_A : (int, 'a) constructor = A <fun>
 |}]
 
-let constructor_B : _ constructor = B (fun x {module M : Monad} -> x);;
+let constructor_B : _ constructor = B (fun x {M : Monad} -> x);;
 
 [%%expect{|
 val constructor_B : ('a, 'b) constructor = B <fun>
