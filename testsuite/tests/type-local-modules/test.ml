@@ -432,3 +432,33 @@ Line 1, characters 48-63:
 Error: The function applied to this argument has type {M : Monad} -> 'a
 This argument cannot be applied without label
 |}]
+
+let apply_variable a = a {Option};;
+
+[%%expect{|
+Line 1, characters 25-33:
+1 | let apply_variable a = a {Option};;
+                             ^^^^^^^^
+Error: The function applied to this argument has type 'a
+This argument cannot be applied as a module
+|}]
+
+let apply_ignore = ignore {Option};;
+
+[%%expect{|
+Line 1, characters 26-34:
+1 | let apply_ignore = ignore {Option};;
+                              ^^^^^^^^
+Error: The function applied to this argument has type 'a -> unit
+This argument cannot be applied as a module
+|}]
+
+let apply_non_function = 15 {Option};;
+
+[%%expect{|
+Line 1, characters 25-27:
+1 | let apply_non_function = 15 {Option};;
+                             ^^
+Error: This expression has type int
+       This is not a function; it cannot be applied.
+|}]

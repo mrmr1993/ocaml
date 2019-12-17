@@ -4319,8 +4319,10 @@ and type_application env funct sargs =
               let ty_res = result_type (omitted @ !ignored) ty_fun in
               match ty_res.desc with
                 Tarrow _ ->
-                  let l1 = map_arg_label l1 ~f:(fun _ -> assert false) in
-                  if (!Clflags.classic || not (has_label l1 ty_fun)) then
+                  if (!Clflags.classic || is_module l1 ||
+                      not (has_label
+                        (map_arg_label l1 ~f:(fun _ -> assert false))
+                        ty_fun)) then
                     raise (Error(sarg1.pexp_loc, env,
                                  Apply_wrong_label(l1, ty_res)))
                   else
