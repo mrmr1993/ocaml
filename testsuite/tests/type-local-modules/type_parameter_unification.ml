@@ -42,9 +42,9 @@ let unify_parameters_fail
 Line 2, characters 61-62:
 2 |   (x : {M : Monad} -> int M.t -> bool M.t) : _ module_args = x;;
                                                                  ^
-Error: This expression has type {M/1 : Monad} -> int M/1.t -> bool M/1.t
+Error: This expression has type {M : Monad} -> int M.t -> bool M.t
        but an expression was expected of type
-         int module_args = {M/2 : Monad} -> int M/2.t -> int M/2.t
+         int module_args = {M : Monad} -> int M.t -> int M.t
        Type bool is not compatible with type int
 |}]
 
@@ -53,8 +53,8 @@ type ('a, 'b) constructor =
 
 [%%expect{|
 type ('a, 'b) constructor =
-    A of ({M/1 : Monad} -> 'a)
-  | B of ('b -> {M/2 : Monad} -> 'b)
+    A of ({M : Monad} -> 'a)
+  | B of ('b -> {M : Monad} -> 'b)
 |}]
 
 let failed_constructor_A : _ constructor =

@@ -333,9 +333,9 @@ end;;
 [%%expect{|
 class ['a, 'b] monad :
   object
-    method bind : {M/1 : Monad} -> 'a M/1.t -> f:('a -> 'b M/1.t) -> 'b M/1.t
-    method map : {M/2 : Monad} -> 'a M/2.t -> f:('a -> 'b) -> 'b M/2.t
-    method return : {M/3 : Monad} -> 'a -> 'a M/3.t
+    method bind : {M : Monad} -> 'a M.t -> f:('a -> 'b M.t) -> 'b M.t
+    method map : {M : Monad} -> 'a M.t -> f:('a -> 'b) -> 'b M.t
+    method return : {M : Monad} -> 'a -> 'a M.t
   end
 |}]
 
@@ -461,4 +461,25 @@ Line 1, characters 25-27:
                              ^^
 Error: This expression has type int
        This is not a function; it cannot be applied.
+|}]
+
+let printing_unambiguous (f : {M : Monad} -> 'a M.t)
+    (g : {M : Monad} -> 'b M.t) b =
+  if b then f else g;;
+
+[%%expect{|
+val printing_unambiguous :
+  ({M : Monad} -> 'a M.t) ->
+  ({M : Monad} -> 'a M.t) -> bool -> {M : Monad} -> 'a M.t = <fun>
+|}]
+
+let printing_ambiguous {M : Monad} (f : {M : Monad} -> 'a M.t)
+    (g : {M : Monad} -> 'b M.t) b =
+  if b then f {M} else g {M};;
+
+[%%expect{|
+val printing_ambiguous :
+  {M/1 : Monad} ->
+  ({M/2 : Monad} -> 'a M/2.t) ->
+  ({M/2 : Monad} -> 'a M/2.t) -> bool -> 'a M/1.t = <fun>
 |}]
