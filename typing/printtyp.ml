@@ -313,11 +313,27 @@ let ident_name namespace id =
   end;
   ident_name_simple namespace id
 
+(** Remove the association of the identifier [id] with [namespace] *)
+let remove_ident_name namespace id =
+  if !enabled then
+  let name = Ident.name id in
+  match M.find name (get namespace) with
+  | Uniquely_associated_to (id', _r) ->
+      if Ident.same id id' then
+        set namespace @@ M.remove name (get namespace)
+  | Need_unique_name map ->
+      let map = Ident.Map.remove id map in
+      set namespace @@ M.add name (Need_unique_name map) (get namespace)
+  | Associated_to_pervasives _
+  | exception Not_found ->
+      ()
+
 let reset () =
   Array.iteri ( fun i _ -> map.(i) <- M.empty ) map
 
 end
 let ident_name = Naming_context.ident_name
+let remove_ident_name = Naming_context.remove_ident_name
 let reset_naming_context = Naming_context.reset
 
 let ident ppf id = pp_print_string ppf
@@ -947,12 +963,12 @@ let rec tree_of_typexp sch ty =
         let n =
           List.map (fun li -> String.concat "." (Longident.flatten li)) n
         in
-        Otyp_module_arrow
-          ( ident_name Module m
-          , tree_of_path Module_type p
-          , n
-          , tree_of_typlist sch tyl
-          , tree_of_typexp sch ty2 )
+        let p = tree_of_path Module_type p in
+        let substs = tree_of_typlist sch tyl in
+        let name = ident_name Module m in
+        let ty2 = tree_of_typexp sch ty2 in
+        remove_ident_name Module m;
+        Otyp_module_arrow (name, p, n, substs, ty2)
     | Tarrow(l, ty1, ty2, _) ->
         let pr_arrow l ty1 ty2 =
           let lab =
