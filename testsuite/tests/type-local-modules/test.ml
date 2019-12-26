@@ -483,3 +483,25 @@ val printing_ambiguous :
   ({M/2 : Monad} -> 'a M/2.t) ->
   ({M/2 : Monad} -> 'a M/2.t) -> bool -> 'a M/1.t = <fun>
 |}]
+
+let partially_ambiguous
+    (f : {M : Monad} -> 'a M.t -> {M : Monad} -> 'a M.t -> 'a M.t)
+    (g : {M : Monad} -> 'a M.t -> 'a M.t)
+    {M : Monad} x b =
+  if b then f {M} x {M} x else g {M} x;;
+
+[%%expect{|
+val partially_ambiguous :
+  ({M/1 : Monad} -> 'a M/1.t -> {M/2 : Monad} -> 'a M/2.t -> 'a M/2.t) ->
+  ({M : Monad} -> 'a M.t -> 'a M.t) ->
+  {M : Monad} -> 'a M.t -> bool -> 'a M.t = <fun>
+|}, Principal{|
+Line 5, characters 20-23:
+5 |   if b then f {M} x {M} x else g {M} x;;
+                        ^^^
+Warning 18: this module packing is not principal.
+val partially_ambiguous :
+  ({M/1 : Monad} -> 'a M/1.t -> {M/2 : Monad} -> 'a M/2.t -> 'a M/2.t) ->
+  ({M : Monad} -> 'a M.t -> 'a M.t) ->
+  {M : Monad} -> 'a M.t -> bool -> 'a M.t = <fun>
+|}]
