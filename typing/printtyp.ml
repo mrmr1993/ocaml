@@ -323,7 +323,10 @@ let remove_ident_name namespace id =
         set namespace @@ M.remove name (get namespace)
   | Need_unique_name map ->
       let map = Ident.Map.remove id map in
-      set namespace @@ M.add name (Need_unique_name map) (get namespace)
+      if Ident.Map.is_empty map then
+        set namespace @@ M.remove name (get namespace)
+      else
+        set namespace @@ M.add name (Need_unique_name map) (get namespace)
   | Associated_to_pervasives _
   | exception Not_found ->
       ()
