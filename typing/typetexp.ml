@@ -532,12 +532,12 @@ and transl_type_aux env policy styp =
       raise (Error_forward (Builtin_attributes.error_of_extension ext))
   | Ptyp_functor (name, (p, l), st) ->
       (* TODO: Name uniqueness for nesting. *)
-      let name = Location.mkloc (Ident.create_local name.txt) name.loc in
+      let name = Location.mkloc (Ident.create_type_module name.txt) name.loc in
+      let l, mty = create_package_mty true styp.ptyp_loc env (p, l) in
+      let z = narrow () in
+      let mty = !transl_modtype env mty in
+      widen z;
       let pack =
-        let l, mty = create_package_mty true styp.ptyp_loc env (p, l) in
-        let z = narrow () in
-        let mty = !transl_modtype env mty in
-        widen z;
         let ptys = List.map (fun (s, pty) ->
                                s, transl_type env policy pty
                             ) l in
@@ -552,7 +552,11 @@ and transl_type_aux env policy styp =
         ; pack_fields = ptys
         ; pack_txt = p }
       in
+      let original_name_scope = Ident.scope name.txt in
+      Btype.set_type_module_scope (Ctype.get_current_level()) name.txt;
+      let env = Env.add_module name.txt Mp_present mty.mty_type env in
       let cty = transl_type env policy st in
+      Btype.set_type_module_scope original_name_scope name.txt;
       let ty =
         (* TODO: Dummy type. *)
         if policy = Univars then new_pre_univar () else
