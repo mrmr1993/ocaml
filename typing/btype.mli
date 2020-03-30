@@ -134,6 +134,8 @@ val type_iterators: type_iterators
 val unmark_iterators: type_iterators
         (* Unmark any structure containing types. See [unmark_type] below. *)
 
+val subst_type_modules: (Ident.t * Ident.t) list -> type_desc -> type_desc
+
 val copy_type_desc:
     ?keep_names:bool -> (type_expr -> type_expr) -> type_desc -> type_desc
         (* Copy on types *)

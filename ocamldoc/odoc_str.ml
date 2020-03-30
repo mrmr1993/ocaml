@@ -36,14 +36,15 @@ let rec is_arrow_type t =
   | Types.Ttuple _
   | Types.Tconstr _
   | Types.Tvar _ | Types.Tunivar _ | Types.Tobject _ | Types.Tpoly _
-  | Types.Tfield _ | Types.Tnil | Types.Tvariant _ | Types.Tpackage _ -> false
+  | Types.Tfield _ | Types.Tnil | Types.Tvariant _ | Types.Tpackage _
+  | Types.Tfunctor _ -> false
 
 let raw_string_of_type_list sep type_list =
   let buf = Buffer.create 256 in
   let fmt = Format.formatter_of_buffer buf in
   let rec need_parent t =
     match t.Types.desc with
-      Types.Tarrow _ | Types.Ttuple _ -> true
+      Types.Tarrow _ | Types.Ttuple _ | Types.Tfunctor _ -> true
     | Types.Tlink t2 | Types.Tsubst t2 -> need_parent t2
     | Types.Tconstr _ ->
         false

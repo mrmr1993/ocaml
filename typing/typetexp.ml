@@ -537,33 +537,28 @@ and transl_type_aux env policy styp =
       let z = narrow () in
       let mty = !transl_modtype env mty in
       widen z;
-      let pack =
+      let pack, pack_ty =
         let ptys = List.map (fun (s, pty) ->
                                s, transl_type env policy pty
                             ) l in
         let path = !transl_modtype_longident styp.ptyp_loc env p.txt in
-        let ty = newty (Tpackage (path,
-                         List.map (fun (s, _pty) -> s.txt) l,
-                         List.map (fun (_, cty) -> cty.ctyp_type) ptys))
+        let ty =
+          ( path
+          , List.map (fun (s, _pty) -> s.txt) l
+          , List.map (fun (_, cty) -> cty.ctyp_type) ptys )
         in
-        ignore ty;
-        { pack_path = path
-        ; pack_type = mty.mty_type
-        ; pack_fields = ptys
-        ; pack_txt = p }
+        ( { pack_path = path
+          ; pack_type = mty.mty_type
+          ; pack_fields = ptys
+          ; pack_txt = p }
+        , ty )
       in
       let original_name_scope = Ident.scope name.txt in
-      Btype.set_type_module_scope (Ctype.get_current_level()) name.txt;
+      Btype.set_type_module_scope (Ctype.get_current_level ()) name.txt;
       let env = Env.add_module name.txt Mp_present mty.mty_type env in
       let cty = transl_type env policy st in
       Btype.set_type_module_scope original_name_scope name.txt;
-      let ty =
-        (* TODO: Dummy type. *)
-        if policy = Univars then new_pre_univar () else
-          if policy = Fixed then
-            raise (Error (styp.ptyp_loc, env, Unbound_type_variable "_"))
-          else newvar ()
-      in
+      let ty = newty (Tfunctor (name.txt, pack_ty, cty.ctyp_type)) in
       ctyp (Ttyp_functor (name, pack, cty)) ty
 
 and transl_poly_type env policy t =

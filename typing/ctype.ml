@@ -523,6 +523,42 @@ let rec filter_row_fields erase = function
       | Reither(_,_,false,e) when erase -> set_row_field e Rabsent; fi
       | _ -> p :: fi
 
+                   (****************************************)
+                   (*  Utility functions for type modules  *)
+                   (****************************************)
+
+let mty_of_package' = ref (fun _ _ -> assert false)
+
+let mty_of_package = !mty_of_package'
+
+(* Naive copy of a type, substituting identifiers for type modules.
+   Warning:
+   * This will destroy physical equality between all nodes except [Tvar _] and
+     [Tunivar _].
+   * This will erase the [abbrev_memo] of all [Tconstr] nodes.
+   * This will destroy physical equality between [Tobject] type name
+     references.
+*)
+let rec subst_type_modules_expr id_pairs ty =
+  let desc =
+    match ty.desc with
+    | Tvar _ | Tunivar _ as ty -> ty
+    | Tlink ty -> Tlink (subst_type_modules_expr id_pairs ty)
+    | Tsubst _ -> assert false
+    | Tfunctor (id, (p, nl, tl), t) ->
+        let p = Path.subst_type_modules id_pairs p in
+        let tl = List.map (subst_type_modules_expr id_pairs) tl in
+        let id' = Ident.create_type_module (Ident.name id) in
+        let t = subst_type_modules_expr ((id, id') :: id_pairs) t in
+        Tfunctor (id', (p, nl, tl), t)
+    | desc ->
+        let desc = subst_type_modules id_pairs desc in
+        copy_type_desc (subst_type_modules_expr id_pairs) desc
+  in
+  let t = newty2 ty.level desc in
+  set_scope t ty.scope;
+  t
+
                     (**************************************)
                     (*  Check genericity of type schemes  *)
                     (**************************************)
@@ -1061,6 +1097,37 @@ let compute_univars ty =
   fun ty ->
     try !(TypeHash.find node_univars ty) with Not_found -> TypeSet.empty
 
+let compute_type_module_idents ty =
+  let node_tymods = ref TypeSet.empty in
+  let add_tymod id ty =
+    match ty.desc with
+      Tfunctor (id', _, _) when Ident.same id id' -> raise Exit
+    | _ -> node_tymods := TypeSet.add ty !node_tymods
+  in
+  let rec iter_tymods idents ptys ty =
+    let add_id id =
+      if Ident.is_type_module id && List.exists (Ident.same id) idents then
+        try
+          List.iter (add_tymod id) ptys;
+          (* Sanity check: this identifier must be scoped by a [Tfunctor]. *)
+          assert false
+        with Exit -> ()
+    in
+    match ty.desc with
+    | Tfunctor (id, (p, _, _), _) ->
+        List.iter add_id (Path.heads p);
+        iter_type_expr (iter_tymods (id :: idents) (ty :: ptys)) ty
+    | Tconstr (p, _, _)
+    | Tobject (_, {contents = Some (p, _)})
+    | Tpackage (p, _, _)  ->
+        List.iter add_id (Path.heads p);
+        iter_type_expr (iter_tymods idents (ty :: ptys)) ty
+    | _ ->
+        iter_type_expr (iter_tymods idents (ty :: ptys)) ty
+  in
+  iter_tymods [] [] ty;
+  fun ty -> TypeSet.mem ty !node_tymods
+
 
                               (*******************)
                               (*  Instantiation  *)
@@ -1093,28 +1160,39 @@ let abbreviations = ref (ref Mnil)
 
 (* partial: we may not wish to copy the non generic types
    before we call type_pat *)
-let rec copy ?partial ?keep_names scope ty =
-  let copy = copy ?partial ?keep_names scope in
+let rec copy ?partial ?type_modules ?keep_names scope ty =
+  let copy' type_modules = copy ?partial ?keep_names ?type_modules scope in
+  let copy = copy' type_modules in
   let ty = repr ty in
   match ty.desc with
     Tsubst ty -> ty
   | _ ->
-    if ty.level <> generic_level && partial = None then ty else
+    (* Copy this type if it involves type modules that we are replacing. *)
+    let without_type_modules, type_modules_subst =
+      match type_modules with
+      | None -> true, []
+      | Some (has_type_modules, type_modules_subst) ->
+        (not (has_type_modules ty), type_modules_subst)
+    in
+    if ty.level <> generic_level && partial = None && without_type_modules
+      then ty else
     (* We only forget types that are non generic and do not contain
        free univars *)
     let forget =
       if ty.level = generic_level then generic_level else
       match partial with
-        None -> assert false
+        None -> ty.level
       | Some (free_univars, keep) ->
           if TypeSet.is_empty (free_univars ty) then
             if keep then ty.level else !current_level
           else generic_level
     in
-    if forget <> generic_level then newty2 forget (Tvar None) else
+    if forget <> generic_level && without_type_modules
+    then newty2 forget (Tvar None) else
     let desc = ty.desc in
     For_copy.save_desc scope ty desc;
-    let t = newvar() in          (* Stub *)
+    let level = if forget = generic_level then !current_level else forget in
+    let t = newvar2 level in          (* Stub *)
     set_scope t ty.scope;
     ty.desc <- Tsubst t;
     t.desc <-
@@ -1134,8 +1212,9 @@ let rec copy ?partial ?keep_names scope ty =
              ation can be released by changing the content of just
              one reference.
           *)
-              Tconstr (p, List.map copy tl,
-                       ref (match !(!abbreviations) with
+              Tconstr (Path.subst_type_modules type_modules_subst p
+                      , List.map copy tl
+                      , ref (match !(!abbreviations) with
                               Mcons _ -> Mlink !abbreviations
                             | abbrev  -> abbrev))
           end
@@ -1208,7 +1287,21 @@ let rec copy ?partial ?keep_names scope ty =
           end
       | Tobject (ty1, _) when partial <> None ->
           Tobject (copy ty1, ref None)
-      | _ -> copy_type_desc ?keep_names copy desc
+      | Tfunctor (id, (p, n, tl), t) ->
+          let p = Path.subst_type_modules type_modules_subst p in
+          let tl = List.map copy tl in
+          (* Create a new identifier [id'] to replace [id] with in the copy. *)
+          let id' = Ident.create_type_module (Ident.name id) in
+          let type_modules =
+            match type_modules with
+            | None -> Some (compute_type_module_idents ty, [(id, id')])
+            | Some (has_type_modules, type_modules_subst) ->
+                Some (has_type_modules, (id, id') :: type_modules_subst)
+          in
+          Tfunctor (id', (p, n, tl), copy' type_modules t)
+      | _ ->
+          let desc = subst_type_modules type_modules_subst desc in
+          copy_type_desc ?keep_names copy desc
       end;
     t
 
@@ -1387,14 +1480,21 @@ let delayed_copy = ref []
 
 (* Copy without sharing until there are no free univars left *)
 (* all free univars must be included in [visited]            *)
-let rec copy_sep cleanup_scope fixed free bound visited ty =
+let rec copy_sep cleanup_scope fixed free ?type_modules bound visited ty =
   let ty = repr ty in
   let univars = free ty in
   if TypeSet.is_empty univars then
-    if ty.level <> generic_level then ty else
+    if ty.level <> generic_level
+      && (match type_modules with
+          | None -> true
+          | Some (has_type_modules, _) ->
+              (* Copy this type if it involves type modules that we are
+                 replacing. *)
+              not (has_type_modules ty))
+    then ty else
     let t = newvar () in
     delayed_copy :=
-      lazy (t.desc <- Tlink (copy cleanup_scope ty))
+      lazy (t.desc <- Tlink (copy ?type_modules cleanup_scope ty))
       :: !delayed_copy;
     t
   else try
@@ -1409,7 +1509,12 @@ let rec copy_sep cleanup_scope fixed free bound visited ty =
         Tarrow _ | Ttuple _ | Tvariant _ | Tconstr _ | Tobject _ | Tpackage _ ->
           (ty,(t,bound)) :: visited
       | _ -> visited in
-    let copy_rec = copy_sep cleanup_scope fixed free bound visited in
+    let copy_rec = copy_sep cleanup_scope fixed free ?type_modules bound visited in
+    let type_modules_subst =
+      match type_modules with
+      | None -> []
+      | Some (_, type_modules_subst) -> type_modules_subst
+    in
     t.desc <-
       begin match ty.desc with
       | Tvariant row0 ->
@@ -1428,7 +1533,23 @@ let rec copy_sep cleanup_scope fixed free bound visited ty =
           let visited =
             List.map2 (fun ty t -> ty,(t,bound)) tl tl' @ visited in
           Tpoly (copy_sep cleanup_scope fixed free bound visited t1, tl')
-      | _ -> copy_type_desc copy_rec ty.desc
+      | Tfunctor (id, (p, n, tl), t) ->
+          let p = Path.subst_type_modules type_modules_subst p in
+          let tl = List.map copy_rec tl in
+          (* Create a new identifier [id'] to replace [id] with in the copy. *)
+          let id' = Ident.create_type_module (Ident.name id) in
+          let type_modules =
+            match type_modules with
+            | None -> Some (compute_type_module_idents ty, [(id, id')])
+            | Some (has_type_modules, type_modules_subst) ->
+                Some (has_type_modules, (id, id') :: type_modules_subst)
+          in
+          Tfunctor
+            ( id'
+            , (p, n, tl)
+            , copy_sep cleanup_scope fixed free ?type_modules bound visited t )
+      | desc ->
+          copy_type_desc copy_rec (subst_type_modules type_modules_subst desc)
       end;
     t
   end
@@ -4154,6 +4275,16 @@ let rec build_subtype env visited loops posi level t =
       else (t, Unchanged)
   | Tunivar _ | Tpackage _ ->
       (t, Unchanged)
+  | Tfunctor (id, pack, t1) ->
+      let env = Env.add_module id Mp_present (mty_of_package env pack) env in
+      let (t1, c) = build_subtype env visited loops posi level t1 in
+      if c > Unchanged then
+        let id' = Ident.create_type_module (Ident.name id) in
+        (* This is extremely aggressive, but is also the simplest and most
+           efficient way to handle this case.. *)
+        let t1 = subst_type_modules_expr [(id, id')] t1 in
+        (newty (Tfunctor (id', pack, t1)), c)
+      else (t, Unchanged)
 
 let enlarge_type env ty =
   warn := false;
@@ -4627,6 +4758,30 @@ let rec nondep_type_rec ?(expand_private=false) env ids ty =
                 Tvariant {row with row_name = None}
             | _ -> Tvariant row
           end
+      | Tfunctor (id, (p, nl, tl), t) when Path.exists_free ids p ->
+          let pack =
+            if Path.exists_free ids p then
+              let p' = normalize_package_path env p in
+              begin match Path.find_free_opt ids p' with
+              | Some id -> raise (Nondep_cannot_erase id)
+              | None ->
+                  (p', nl, List.map (nondep_type_rec env ids) tl)
+              end
+            else (p, nl, List.map (nondep_type_rec env ids) tl)
+          in
+          (* Create a new identifier to replace [id] in the copied type, and
+             bind them in the environment.
+          *)
+          let id' = Ident.create_type_module (Ident.name id) in
+          let mty = mty_of_package env pack in
+          let env = Env.add_module id' Mp_present mty env in
+          let env =
+            Env.add_module id Mp_absent (Mty_alias (Path.Pident id')) env
+          in
+          (* Erase all instances of [id] in [t]. These will be replaced with
+             [id'], possibly erasing further in the presence of functors.
+          *)
+          Tfunctor (id', (p, nl, tl), nondep_type_rec env (id :: ids) t)
       | _ -> copy_type_desc (nondep_type_rec env ids) ty.desc
       end;
     ty'

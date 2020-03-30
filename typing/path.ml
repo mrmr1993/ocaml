@@ -97,6 +97,23 @@ let rec last = function
   | Pdot(_, s) -> s
   | Papply(_, p) -> last p
 
+let rec subst_type_modules id_pairs = function
+  | Pident id as p ->
+      begin match
+        List.find_map
+          (fun (id1, id2) -> if Ident.same id id1 then Some id2 else None)
+          id_pairs
+      with
+      | Some id -> Pident id
+      | None -> p
+      end
+  | Pdot (p, s) -> Pdot (subst_type_modules id_pairs p, s)
+  | Papply (p1, p2) ->
+      Papply (subst_type_modules id_pairs p1, subst_type_modules id_pairs p2)
+
+let subst_type_modules id_pairs p =
+  if id_pairs = [] then p else subst_type_modules id_pairs p
+
 let is_uident s =
   assert (s <> "");
   match s.[0] with

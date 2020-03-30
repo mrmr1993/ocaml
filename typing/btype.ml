@@ -312,6 +312,9 @@ let fold_type_expr f init ty =
     let result = f init ty in
     List.fold_left f result tyl
   | Tpackage (_, _, l)  -> List.fold_left f init l
+  | Tfunctor (_, (_, _, l), ty) ->
+    let result = List.fold_left f init l in
+    f result ty
 
 let iter_type_expr f ty =
   fold_type_expr (fun () v -> f v) () ty
@@ -481,6 +484,28 @@ let rec norm_univar ty =
   | Ttuple (ty :: _)   -> norm_univar ty
   | _                  -> assert false
 
+let rec subst_type_modules id_pairs = function
+  | Tvariant _             -> assert false (* too ambiguous *)
+  | Tsubst _               -> assert false
+  | Tfunctor _             -> assert false (* must be handled by caller *)
+  | ty when id_pairs = []  -> ty
+  | Tvar _ as ty           -> ty
+  | Tarrow _ as ty         -> ty
+  | Ttuple _ as ty         -> ty
+  | Tconstr (p, l, _abbrev) ->
+      Tconstr (Path.subst_type_modules id_pairs p, l, ref Mnil)
+  | Tobject (ty, {contents = Some (p, tl)}) ->
+      let p = Path.subst_type_modules id_pairs p in
+      Tobject (ty, ref (Some (p, tl)))
+  | Tobject _ as ty        -> ty
+  | Tfield _ as ty         -> ty
+  | Tnil                   -> Tnil
+  | Tlink ty               -> subst_type_modules id_pairs ty.desc
+  | Tunivar _ as ty        -> ty
+  | Tpoly _ as ty          -> ty
+  | Tpackage (p, n, l)     ->
+      Tpackage (Path.subst_type_modules id_pairs p, n, l)
+
 let rec copy_type_desc ?(keep_names=false) f = function
     Tvar _ as ty        -> if keep_names then ty else Tvar None
   | Tarrow (p, ty1, ty2, c)-> Tarrow (p, f ty1, f ty2, copy_commu c)
@@ -500,6 +525,7 @@ let rec copy_type_desc ?(keep_names=false) f = function
       let tyl = List.map (fun x -> norm_univar (f x)) tyl in
       Tpoly (f ty, tyl)
   | Tpackage (p, n, l)  -> Tpackage (p, n, List.map f l)
+  | Tfunctor _          -> assert false (* must be handled by caller *)
 
 (* Utilities for copying *)
 

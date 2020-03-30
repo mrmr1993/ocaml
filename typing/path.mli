@@ -37,6 +37,8 @@ val heads: t -> Ident.t list
 
 val last: t -> string
 
+val subst_type_modules: (Ident.t * Ident.t) list -> t -> t
+
 val is_uident: string -> bool
 
 type typath =
