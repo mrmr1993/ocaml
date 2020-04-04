@@ -1029,6 +1029,15 @@ let rec lower_contravariant env var_level visited contra ty =
     | Tarrow (_, t1, t2, _) ->
         lower_rec true t1;
         lower_rec contra t2
+    | Tfunctor (id, ((_, _, tl) as pack), t) ->
+        List.iter (lower_rec true) tl;
+        let env =
+          Env.add_module id Mp_present (mty_of_package env pack) env
+        in
+        let scope = Ident.scope id in
+        set_type_module_scope ty.level id;
+        lower_contravariant env var_level visited contra t;
+        set_type_module_scope scope id
     | _ ->
         iter_type_expr (lower_rec contra) ty
   end
