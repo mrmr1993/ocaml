@@ -1945,11 +1945,21 @@ let rec occur_rec env allow_recursive visited ty0 = function
       end
   | Tobject _ | Tvariant _ ->
       ()
+  | _ when allow_recursive || TypeSet.mem ty visited ->
+      ()
+  | Tfunctor (id, ((_, _, tl) as pack), t) ->
+      let visited = TypeSet.add ty visited in
+      List.iter (occur_rec env allow_recursive visited ty0) tl;
+      let env = Env.add_module id Mp_present (mty_of_package env pack) env in
+      let scope = Ident.scope id in
+      set_type_module_scope ty.level id;
+      Misc.try_finally (fun () ->
+          occur_rec env allow_recursive visited ty0 t;
+        )
+        ~always:(fun () -> set_type_module_scope scope id)
   | _ ->
-      if allow_recursive ||  TypeSet.mem ty visited then () else begin
-        let visited = TypeSet.add ty visited in
-        iter_type_expr (occur_rec env allow_recursive visited ty0) ty
-      end
+      let visited = TypeSet.add ty visited in
+      iter_type_expr (occur_rec env allow_recursive visited ty0) ty
 
 let type_changed = ref false (* trace possible changes to the studied type *)
 
@@ -2003,6 +2013,16 @@ let rec local_non_recursive_abbrev strict visited env p ty =
               local_non_recursive_abbrev strict visited env p ty)
             params args
         end
+    | Tfunctor (id, ((_, _, tl) as pack), t) ->
+        let visited = ty :: visited in
+        List.iter (local_non_recursive_abbrev true visited env p) tl;
+        let env = Env.add_module id Mp_present (mty_of_package env pack) env in
+        let scope = Ident.scope id in
+        set_type_module_scope ty.level id;
+        Misc.try_finally (fun () ->
+            local_non_recursive_abbrev true visited env p t
+          )
+          ~always:(fun () -> set_type_module_scope scope id)
     | _ ->
         if strict then (* PR#7374 *)
           let visited = ty :: visited in
@@ -2047,7 +2067,7 @@ let rec unify_univar t1 t2 = function
 (* that's way too expensive. Must do some kind of caching *)
 let occur_univar env ty =
   let visited = ref TypeMap.empty in
-  let rec occur_rec bound ty =
+  let rec occur_rec env bound ty =
     let ty = repr ty in
     if ty.level >= lowest_level &&
       if TypeSet.is_empty bound then
@@ -2068,7 +2088,7 @@ let occur_univar env ty =
             raise Trace.(Unify [escape (Univ ty)])
       | Tpoly (ty, tyl) ->
           let bound = List.fold_right TypeSet.add (List.map repr tyl) bound in
-          occur_rec bound  ty
+          occur_rec env bound ty
       | Tconstr (_, [], _) -> ()
       | Tconstr (p, tl, _) ->
           begin try
@@ -2076,15 +2096,21 @@ let occur_univar env ty =
             List.iter2
               (fun t v ->
                 if Variance.(mem May_pos v || mem May_neg v)
-                then occur_rec bound t)
+                then occur_rec env bound t)
               tl td.type_variance
           with Not_found ->
-            List.iter (occur_rec bound) tl
+            List.iter (occur_rec env bound) tl
           end
-      | _ -> iter_type_expr (occur_rec bound) ty
+      | Tfunctor (id, ((_, _, tl) as pack), t) ->
+          List.iter (occur_rec env bound) tl;
+          let env =
+            Env.add_module id Mp_present (mty_of_package env pack) env
+          in
+          occur_rec env bound t
+      | _ -> iter_type_expr (occur_rec env bound) ty
   in
   Misc.try_finally (fun () ->
-      occur_rec TypeSet.empty ty
+      occur_rec env TypeSet.empty ty
     )
     ~always:(fun () -> unmark_type ty)
 
@@ -2108,14 +2134,14 @@ let get_univar_family univar_pairs univars =
 let univars_escape env univar_pairs vl ty =
   let family = get_univar_family univar_pairs vl in
   let visited = ref TypeSet.empty in
-  let rec occur t =
+  let rec occur env t =
     let t = repr t in
     if TypeSet.mem t !visited then () else begin
       visited := TypeSet.add t !visited;
       match t.desc with
         Tpoly (t, tl) ->
           if List.exists (fun t -> TypeSet.mem (repr t) family) tl then ()
-          else occur t
+          else occur env t
       | Tunivar _ ->
           if TypeSet.mem t family then raise Trace.(Unify [escape(Univ t)])
       | Tconstr (_, [], _) -> ()
@@ -2124,16 +2150,22 @@ let univars_escape env univar_pairs vl ty =
             let td = Env.find_type p env in
             List.iter2
               (fun t v ->
-                if Variance.(mem May_pos v || mem May_neg v) then occur t)
+                if Variance.(mem May_pos v || mem May_neg v) then occur env t)
               tl td.type_variance
           with Not_found ->
-            List.iter occur tl
+            List.iter (occur env) tl
           end
+      | Tfunctor (id, ((_, _, tl) as pack), t) ->
+          List.iter (occur env) tl;
+          let env =
+            Env.add_module id Mp_present (mty_of_package env pack) env
+          in
+          occur env t
       | _ ->
-          iter_type_expr occur t
+          iter_type_expr (occur env) t
     end
   in
-  occur ty
+  occur env ty
 
 (* Wrapper checking that no variable escapes and updating univar_pairs *)
 let enter_poly env univar_pairs t1 tl1 t2 tl2 f =
