@@ -949,6 +949,21 @@ let rec update_level env level expand ty =
     | Tfield(lab, _, ty1, _)
       when lab = dummy_method && (repr ty1).level > level ->
         raise Trace.(Unify [escape Self])
+    | Tfunctor (id, (p, nl, tl), t) when level < Path.scope p ->
+        let p' = normalize_package_path env p in
+        if Path.same p p' then raise Trace.(Unify [escape (Module_type p)]);
+        set_type_desc ty (Tfunctor (id, (p', nl, tl), t));
+        update_level env level expand ty
+    | Tfunctor (id, ((_, _, tl) as pack), t) ->
+        set_level ty level;
+        List.iter (update_level env level expand) tl;
+        let env =
+          Env.add_module id Mp_present (mty_of_package env pack) env
+        in
+        let scope = Ident.scope id in
+        set_type_module_scope level id;
+        update_level env level expand t;
+        set_type_module_scope scope id
     | _ ->
         set_level ty level;
         (* XXX what about abbreviations in Tconstr ? *)
