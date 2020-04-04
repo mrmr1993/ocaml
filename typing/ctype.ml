@@ -810,6 +810,10 @@ let rec generalize_spine ty =
       set_level ty generic_level;
       memo := Mnil;
       List.iter generalize_spine tyl
+  | Tfunctor (_, (_, _, tyl), t) ->
+      set_level ty generic_level;
+      List.iter generalize_spine tyl;
+      generalize_spine t
   | _ -> ()
 
 let forward_try_expand_once = (* Forward declaration *)
