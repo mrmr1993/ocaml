@@ -27,6 +27,21 @@ let rec same p1 p2 =
        same fun1 fun2 && same arg1 arg2
   | (_, _) -> false
 
+let rec equiv equiv_list p1 p2 =
+  p1 == p2
+  || match (p1, p2) with
+    (Pident id1, Pident id2) ->
+    Ident.same id1 id2
+    || List.exists
+        (fun (id1', id2') ->
+          (Ident.same id1 id1' && Ident.same id2 id2')
+          || (Ident.same id1 id2' && Ident.same id2 id1'))
+        equiv_list
+  | (Pdot(p1, s1), Pdot(p2, s2)) -> s1 = s2 && equiv equiv_list p1 p2
+  | (Papply(fun1, arg1), Papply(fun2, arg2)) ->
+       equiv equiv_list fun1 fun2 && equiv equiv_list arg1 arg2
+  | (_, _) -> false
+
 let rec compare p1 p2 =
   if p1 == p2 then 0
   else match (p1, p2) with

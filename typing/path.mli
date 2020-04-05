@@ -21,6 +21,13 @@ type t =
   | Papply of t * t
 
 val same: t -> t -> bool
+
+val equiv : (Ident.t * Ident.t) list -> t -> t -> bool
+(** [equiv equiv_list p1 p2] returns true if the paths are the same up to
+    identifiers, and the identifiers are all either the same or a pair in
+    [equiv_list].
+*)
+
 val compare: t -> t -> int
 val find_free_opt: Ident.t list -> t -> Ident.t option
 val exists_free: Ident.t list -> t -> bool
