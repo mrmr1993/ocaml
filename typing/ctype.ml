@@ -591,6 +591,17 @@ let rec subst_type_modules_expr id_pairs ty =
   set_scope t ty.scope;
   t
 
+  let with_type_module env level id pack f =
+    let scope = Ident.scope id in
+    Misc.try_finally (fun () ->
+        set_type_module_scope level id;
+        let env =
+          Env.add_module id Mp_present (mty_of_package env pack) env
+        in
+        f env
+      )
+      ~always:(fun () -> set_type_module_scope scope id)
+
                     (**************************************)
                     (*  Check genericity of type schemes  *)
                     (**************************************)

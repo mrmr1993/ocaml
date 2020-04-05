@@ -484,6 +484,10 @@ let rec check_constraints_rec env loc visited ty =
   | Tpoly (ty, tl) ->
       let _, ty = Ctype.instance_poly false tl ty in
       check_constraints_rec env loc visited ty
+  | Tfunctor (id, ((_, _, tl) as pack), t) ->
+      List.iter (check_constraints_rec env loc visited) tl;
+      Ctype.with_type_module env (Ctype.get_current_level ()) id pack
+        (fun env -> check_constraints_rec env loc visited t)
   | _ ->
       Btype.iter_type_expr (check_constraints_rec env loc visited) ty
   end

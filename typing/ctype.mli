@@ -158,6 +158,12 @@ val merge_row_fields:
 val filter_row_fields:
         bool -> (label * row_field) list -> (label * row_field) list
 
+val with_type_module: Env.t -> int -> Ident.t -> type_package ->
+                      (Env.t -> 'a) -> 'a
+(** Attach a type module at the given level and run the callback function with
+    it attached in the environment.
+*)
+
 val generalize: type_expr -> unit
         (* Generalize in-place the given type *)
 val lower_contravariant: Env.t -> type_expr -> unit
