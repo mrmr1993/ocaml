@@ -1594,7 +1594,9 @@ let rec copy_sep cleanup_scope fixed free ?type_modules bound visited ty =
       | Tfunctor _ ->
           (ty,(t,bound)) :: visited
       | _ -> visited in
-    let copy_rec = copy_sep cleanup_scope fixed free ?type_modules bound visited in
+    let copy_rec =
+      copy_sep cleanup_scope fixed free ?type_modules bound visited
+    in
     let type_modules_subst =
       match type_modules with
       | None -> []
@@ -2444,7 +2446,8 @@ let rec mcomp type_pairs ident_pairs env t1 t2 =
   | (Tvar _, _)
   | (_, Tvar _)  ->
       ()
-  | (Tconstr (p1, [], _), Tconstr (p2, [], _)) when Path.equiv ident_pairs p1 p2 ->
+  | (Tconstr (p1, [], _), Tconstr (p2, [], _))
+    when Path.equiv ident_pairs p1 p2 ->
       ()
   | _ ->
       let t1' = expand_head_opt env t1 in
@@ -4671,8 +4674,8 @@ let rec subtype_rec ident_pairs env trace t1 t2 cstrs =
           set_type_module_scope t1.level id1;
           set_type_module_scope t2.level id2;
           let cstrs =
-            subtype_rec ((id1, id2) :: ident_pairs) env (Trace.diff u1 u2::trace)
-              u1 u2 cstrs
+            subtype_rec ((id1, id2) :: ident_pairs) env
+              (Trace.diff u1 u2::trace) u1 u2 cstrs
           in
           set_type_module_scope scope1 id1;
           set_type_module_scope scope2 id2;
