@@ -3870,7 +3870,8 @@ let rec eqtype rename type_pairs ident_pairs subst env t1 t2 =
               set_type_module_scope t1.level id1;
               let scope2 = Ident.scope id2 in
               set_type_module_scope t2.level id2;
-              eqtype rename type_pairs ident_pairs subst env t1 t2;
+              eqtype rename type_pairs ((id1, id2) :: ident_pairs) subst env
+                t1 t2;
               set_type_module_scope scope1 id1;
               set_type_module_scope scope2 id2;
           | (_, _) ->
