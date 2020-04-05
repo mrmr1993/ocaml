@@ -2729,10 +2729,31 @@ let unify_eq t1 t2 =
       try TypePairs.find unify_eq_set (order_type_pair t1 t2); true
       with Not_found -> false
 
-let unify1_var env t1 t2 =
+let unify1_var ident_pairs env t1 t2 =
   assert (is_Tvar t1);
   occur env t1 t2;
   occur_univar env t2;
+  begin if ident_pairs <> [] then
+    (* Set the scopes of all local type modules as the highest possible, so that
+       their paths will escape unless they can be expanded.
+    *)
+    let scopes =
+      let level = generic_level - 1 in
+      List.map (fun (id1, id2) ->
+          let scope1 = Ident.scope id1 in
+          let scope2 = Ident.scope id2 in
+          set_type_module_scope level id1;
+          set_type_module_scope level id2;
+          (scope1, scope2) )
+        ident_pairs
+    in
+    check_scope_escape env t1.level t2;
+    (* Restore local type module scopes. *)
+    List.iter2 (fun (id1, id2) (scope1, scope2) ->
+        set_type_module_scope scope1 id1;
+        set_type_module_scope scope2 id2 )
+      ident_pairs scopes
+  end;
   let d1 = t1.desc in
   link_type t1 t2;
   try
@@ -2758,9 +2779,9 @@ let rec unify ident_pairs (env:Env.t ref) t1 t2 =
     | (Tconstr _, Tvar _) when deep_occur t2 t1 ->
         unify2 ident_pairs env t1 t2
     | (Tvar _, _) ->
-        unify1_var !env t1 t2
+        unify1_var ident_pairs !env t1 t2
     | (_, Tvar _) ->
-        unify1_var !env t2 t1
+        unify1_var ident_pairs !env t2 t1
     | (Tunivar _, Tunivar _) ->
         unify_univar t1 t2 !univar_pairs;
         update_level !env t1.level t2;
