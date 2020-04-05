@@ -553,10 +553,13 @@ and transl_type_aux env policy styp =
           ; pack_txt = p }
         , ty )
       in
+      begin_def();
       let original_name_scope = Ident.scope name.txt in
       Btype.set_type_module_scope (Ctype.get_current_level ()) name.txt;
       let env = Env.add_module name.txt Mp_present mty.mty_type env in
       let cty = transl_type env policy st in
+      end_def();
+      generalize cty.ctyp_type;
       Btype.set_type_module_scope original_name_scope name.txt;
       let ty = newty (Tfunctor (name.txt, pack_ty, cty.ctyp_type)) in
       ctyp (Ttyp_functor (name, pack, cty)) ty
