@@ -4651,7 +4651,11 @@ let rec subtype_rec ident_pairs env trace t1 t2 cstrs =
           (trace, t1, t2, !univar_pairs, ident_pairs, env)::cstrs
         end
     | (Tpackage pack1, Tpackage pack2) ->
-        subtype_package ident_pairs env trace t1 t2 pack1 pack2 cstrs
+        begin try
+          subtype_package ident_pairs env trace t1 t2 pack1 pack2 cstrs
+        with Not_found ->
+          (trace, t1, t2, !univar_pairs, ident_pairs, env)::cstrs
+        end
     | (Tfunctor (id1, pack1, u1), Tfunctor (id2, pack2, u2)) ->
         begin try
           let cstrs =
@@ -4673,7 +4677,7 @@ let rec subtype_rec ident_pairs env trace t1 t2 cstrs =
           set_type_module_scope scope1 id1;
           set_type_module_scope scope2 id2;
           cstrs
-        with Unify _ ->
+        with Not_found ->
           (trace, t1, t2, !univar_pairs, ident_pairs, env)::cstrs
         end
     | (_, _) ->
@@ -4762,31 +4766,28 @@ and subtype_row ident_pairs env trace row1 row2 cstrs =
 
 and subtype_package ident_pairs env trace t1 t2 (p1, nl1, tl1) (p2, nl2, tl2)
     cstrs =
-  try
-    let ntl1 = complete_type_list env nl2 t1.level (Mty_ident p1) nl1 tl1
-    and ntl2 = complete_type_list env nl1 t2.level (Mty_ident p2) nl2 tl2
-        ~allow_absent:true in
-    let cstrs' =
-      List.map (fun (n2,t2) ->
-          (trace, List.assoc n2 ntl1, t2, !univar_pairs, ident_pairs, env) )
-        ntl2
-    in
-    if eq_package_path ident_pairs env p1 p2 then cstrs' @ cstrs
-    else begin
-      (* need to check module subtyping *)
-      let snap = Btype.snapshot () in
-      try
-        List.iter (fun (_, t1, t2, _, _, _) ->
-            unify_pairs (ref env) t1 t2 [] ident_pairs )
-          cstrs';
-        if !package_subtype env p1 nl1 tl1 p2 nl2 tl2
-        then (Btype.backtrack snap; cstrs' @ cstrs)
-        else raise (Unify [])
-      with Unify _ ->
-        Btype.backtrack snap; raise Not_found
-    end
-  with Unify _ ->
-    (trace, t1, t2, !univar_pairs, ident_pairs, env)::cstrs
+  let ntl1 = complete_type_list env nl2 t1.level (Mty_ident p1) nl1 tl1
+  and ntl2 = complete_type_list env nl1 t2.level (Mty_ident p2) nl2 tl2
+      ~allow_absent:true in
+  let cstrs' =
+    List.map (fun (n2,t2) ->
+        (trace, List.assoc n2 ntl1, t2, !univar_pairs, ident_pairs, env) )
+      ntl2
+  in
+  if eq_package_path ident_pairs env p1 p2 then cstrs' @ cstrs
+  else begin
+    (* need to check module subtyping *)
+    let snap = Btype.snapshot () in
+    try
+      List.iter (fun (_, t1, t2, _, _, _) ->
+          unify_pairs (ref env) t1 t2 [] ident_pairs )
+        cstrs';
+      if !package_subtype env p1 nl1 tl1 p2 nl2 tl2
+      then (Btype.backtrack snap; cstrs' @ cstrs)
+      else raise (Unify [])
+    with Unify _ ->
+      Btype.backtrack snap; raise Not_found
+  end
 
 let subtype env ty1 ty2 =
   TypePairs.clear subtypes;
