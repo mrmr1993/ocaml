@@ -4852,10 +4852,18 @@ let rec nondep_type_rec ?(expand_private=false) env ids ty =
           let env =
             Env.add_module id Mp_absent (Mty_alias (Path.Pident id')) env
           in
+          let scope = Ident.scope id' in
+          set_type_module_scope ty.level id;
+          let t' =
+            Misc.try_finally (fun () ->
+                nondep_type_rec env (id :: ids) t
+              )
+              ~always:(fun () -> set_type_module_scope scope id)
+          in
           (* Erase all instances of [id] in [t]. These will be replaced with
              [id'], possibly erasing further in the presence of functors.
           *)
-          Tfunctor (id', (p, nl, tl), nondep_type_rec env (id :: ids) t)
+          Tfunctor (id', pack, t')
       | _ -> copy_type_desc (nondep_type_rec env ids) ty.desc
       end;
     ty'
