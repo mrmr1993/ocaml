@@ -59,6 +59,7 @@ type variable_context = int * type_expr TyVarMap.t
 
 let transl_modtype_longident = ref (fun _ -> assert false)
 let transl_modtype = ref (fun _ -> assert false)
+let package_constraints = ref (fun _ -> assert false)
 
 let create_package_mty fake loc env (p, l) =
   let l =
@@ -531,7 +532,6 @@ and transl_type_aux env policy styp =
   | Ptyp_extension ext ->
       raise (Error_forward (Builtin_attributes.error_of_extension ext))
   | Ptyp_functor (name, (p, l), st) ->
-      (* TODO: Name uniqueness for nesting. *)
       let name = Location.mkloc (Ident.create_type_module name.txt) name.loc in
       let l, mty = create_package_mty true styp.ptyp_loc env (p, l) in
       let z = narrow () in
@@ -553,10 +553,19 @@ and transl_type_aux env policy styp =
           ; pack_txt = p }
         , ty )
       in
+      (* Add the package constraints to the module type.
+         This allows types such as
+           'a -> {M : S with type t = 'b} -> (M.t as 'a)
+         to pass typechecking.
+      *)
+      let mty_type =
+        let (_, nl, tl) = pack_ty in
+        !package_constraints env loc mty.mty_type nl tl
+      in
       begin_def();
       let original_name_scope = Ident.scope name.txt in
       Btype.set_type_module_scope (Ctype.get_current_level ()) name.txt;
-      let env = Env.add_module name.txt Mp_present mty.mty_type env in
+      let env = Env.add_module name.txt Mp_present mty_type env in
       let cty = transl_type env policy st in
       end_def();
       generalize cty.ctyp_type;

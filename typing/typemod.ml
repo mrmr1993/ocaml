@@ -1825,11 +1825,14 @@ let rec package_constraints env loc mty constrs =
   in
   Mty_signature sg'
 
+let package_constraints' env loc mty nl tl =
+  package_constraints env loc mty
+    (List.combine (List.map Longident.flatten nl) tl)
+
 let modtype_of_package env loc p nl tl =
   match (Env.find_modtype p env).mtd_type with
   | Some mty when nl <> [] ->
-      package_constraints env loc mty
-        (List.combine (List.map Longident.flatten nl) tl)
+      package_constraints' env loc mty nl tl
   | _ ->
       if nl = [] then Mty_ident p
       else raise(Error(loc, env, Signature_expected))
@@ -1848,12 +1851,13 @@ let package_subtype env p1 nl1 tl1 p2 nl2 tl2 =
   with Includemod.Error _msg -> false
     (* raise(Error(Location.none, env, Not_included msg)) *)
 
-let () = Ctype.package_subtype := package_subtype
-
 let mty_of_package env (p, nl, tl) =
   modtype_of_package env Location.none p nl tl
 
-let () = Ctype.mty_of_package' := mty_of_package
+
+let () =
+  Ctype.package_subtype := package_subtype;
+  Ctype.mty_of_package' := mty_of_package
 
 let wrap_constraint env mark arg mty explicit =
   let mark = if mark then Includemod.Mark_both else Includemod.Mark_neither in
@@ -2612,6 +2616,7 @@ let () =
   Typecore.type_module := type_module_alias;
   Typetexp.transl_modtype_longident := transl_modtype_longident;
   Typetexp.transl_modtype := transl_modtype;
+  Typetexp.package_constraints := package_constraints';
   Typecore.type_open := type_open_ ?toplevel:None;
   Typecore.type_open_decl := type_open_decl;
   Typecore.type_package := type_package;
