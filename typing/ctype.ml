@@ -4642,25 +4642,29 @@ let rec subtype_rec ident_pairs env trace t1 t2 cstrs =
     | (Tpackage pack1, Tpackage pack2) ->
         subtype_package ident_pairs env trace t1 t2 pack1 pack2 cstrs
     | (Tfunctor (id1, pack1, u1), Tfunctor (id2, pack2, u2)) ->
-        let cstrs =
-          subtype_package ident_pairs env trace t2 t1 pack2 pack1 cstrs
-        in
-        let env =
-          env
-          |> Env.add_module id1 Mp_present (mty_of_package env pack1)
-          |> Env.add_module id2 Mp_present (mty_of_package env pack2)
-        in
-        let scope1 = Ident.scope id1 in
-        let scope2 = Ident.scope id2 in
-        set_type_module_scope t1.level id1;
-        set_type_module_scope t2.level id2;
-        let cstrs =
-          subtype_rec ((id1, id2) :: ident_pairs) env (Trace.diff u1 u2::trace)
-            u1 u2 cstrs
-        in
-        set_type_module_scope scope1 id1;
-        set_type_module_scope scope2 id2;
-        cstrs
+        begin try
+          let cstrs =
+            subtype_package ident_pairs env trace t2 t1 pack2 pack1 cstrs
+          in
+          let env =
+            env
+            |> Env.add_module id1 Mp_present (mty_of_package env pack1)
+            |> Env.add_module id2 Mp_present (mty_of_package env pack2)
+          in
+          let scope1 = Ident.scope id1 in
+          let scope2 = Ident.scope id2 in
+          set_type_module_scope t1.level id1;
+          set_type_module_scope t2.level id2;
+          let cstrs =
+            subtype_rec ((id1, id2) :: ident_pairs) env (Trace.diff u1 u2::trace)
+              u1 u2 cstrs
+          in
+          set_type_module_scope scope1 id1;
+          set_type_module_scope scope2 id2;
+          cstrs
+        with Unify _ ->
+          (trace, t1, t2, !univar_pairs, ident_pairs, env)::cstrs
+        end
     | (_, _) ->
         (trace, t1, t2, !univar_pairs, ident_pairs, env)::cstrs
   end
