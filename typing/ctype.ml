@@ -2729,11 +2729,8 @@ let unify_eq t1 t2 =
       try TypePairs.find unify_eq_set (order_type_pair t1 t2); true
       with Not_found -> false
 
-let unify1_var ident_pairs env t1 t2 =
-  assert (is_Tvar t1);
-  occur env t1 t2;
-  occur_univar env t2;
-  begin if ident_pairs <> [] then
+let erase_local_type_modules ident_pairs env level t =
+  if ident_pairs <> [] then begin
     (* Set the scopes of all local type modules as the highest possible, so that
        their paths will escape unless they can be expanded.
     *)
@@ -2747,13 +2744,19 @@ let unify1_var ident_pairs env t1 t2 =
           (scope1, scope2) )
         ident_pairs
     in
-    check_scope_escape env t1.level t2;
+    check_scope_escape env level t;
     (* Restore local type module scopes. *)
     List.iter2 (fun (id1, id2) (scope1, scope2) ->
         set_type_module_scope scope1 id1;
         set_type_module_scope scope2 id2 )
       ident_pairs scopes
-  end;
+  end
+
+let unify1_var ident_pairs env t1 t2 =
+  assert (is_Tvar t1);
+  occur env t1 t2;
+  occur_univar env t2;
+  erase_local_type_modules ident_pairs env t1.level t2;
   let d1 = t1.desc in
   link_type t1 t2;
   try
@@ -3177,7 +3180,11 @@ and unify_row ident_pairs env row1 row2 =
       update_level !env rm.level (newgenty (Tvariant row));
     if row_fixed row then
       if more == rm then () else
-      if is_Tvar rm then link_type rm more else unify ident_pairs env rm more
+      if is_Tvar rm then begin
+        link_type rm more;
+        erase_local_type_modules ident_pairs !env rm.level more
+      end else
+        unify ident_pairs env rm more
     else
       let ty = newgenty (Tvariant {row0 with row_fields = rest}) in
       update_level !env rm.level ty;
@@ -3492,6 +3499,7 @@ let rec moregen inst_nongen type_pairs ident_pairs env t1 t2 =
       (Tvar _, _) when may_instantiate inst_nongen t1 ->
         moregen_occur env t1.level t2;
         update_scope t1.scope t2;
+        erase_local_type_modules ident_pairs env t1.level t2;
         occur env t1 t2;
         link_type t1 t2
     | (Tconstr (p1, [], _), Tconstr (p2, [], _))
@@ -3511,6 +3519,7 @@ let rec moregen inst_nongen type_pairs ident_pairs env t1 t2 =
             (Tvar _, _) when may_instantiate inst_nongen t1' ->
               moregen_occur env t1'.level t2;
               update_scope t1'.scope t2;
+              erase_local_type_modules ident_pairs env t1.level t2;
               link_type t1' t2
           | (Tarrow (l1, t1, u1, _), Tarrow (l2, t2, u2, _)) when l1 = l2
             || !Clflags.classic && not (is_optional l1 || is_optional l2) ->
@@ -3628,6 +3637,7 @@ and moregen_row inst_nongen type_pairs ident_pairs env row1 row2 =
       in
       moregen_occur env rm1.level ext;
       update_scope rm1.scope ext;
+      erase_local_type_modules ident_pairs env rm1.level rm2;
       link_type rm1 ext
   | Tconstr _, Tconstr _ ->
       moregen inst_nongen type_pairs ident_pairs env rm1 rm2
