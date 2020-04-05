@@ -2482,7 +2482,7 @@ let rec mcomp type_pairs ident_pairs env t1 t2 =
               (mcomp type_pairs ident_pairs env)
         | (Tunivar _, Tunivar _) ->
             unify_univar t1' t2' !univar_pairs
-        | (Tfunctor (id1, pack1, t1), Tfunctor (id2, pack2, t2)) ->
+        | (Tfunctor (id1, pack1, u1), Tfunctor (id2, pack2, u2)) ->
             let env =
               env
               |> Env.add_module id1 Mp_present (mty_of_package env pack1)
@@ -2492,7 +2492,7 @@ let rec mcomp type_pairs ident_pairs env t1 t2 =
             set_type_module_scope t1.level id1;
             let scope2 = Ident.scope id2 in
             set_type_module_scope t2.level id2;
-            mcomp type_pairs ((id1, id2) :: ident_pairs) env t1 t2;
+            mcomp type_pairs ((id1, id2) :: ident_pairs) env u1 u2;
             set_type_module_scope scope1 id1;
             set_type_module_scope scope2 id2;
         | (_, _) ->
@@ -3028,8 +3028,8 @@ and unify3 ident_pairs env t1 t1' t2 t2' =
             (* if !generate_equations then
               List.iter2 (mcomp_pairs ident_pairs !env) tl1 tl2 *)
           end
-      | ( Tfunctor (id1, ((p1, n1, tl1) as pack1), t1)
-        , Tfunctor (id2, ((p2, n2, tl2) as pack2), t2) ) ->
+      | ( Tfunctor (id1, ((p1, n1, tl1) as pack1), u1)
+        , Tfunctor (id2, ((p2, n2, tl2) as pack2), u2) ) ->
           begin try
             unify_package ident_pairs !env (unify_list ident_pairs env)
               t1.level p1 n1 tl1 t2.level p2 n2 tl2
@@ -3050,7 +3050,7 @@ and unify3 ident_pairs env t1 t1' t2 t2' =
           set_type_module_scope t1.level id1;
           let scope2 = Ident.scope id2 in
           set_type_module_scope t2.level id2;
-          unify ((id1, id2) :: ident_pairs) env t1 t2;
+          unify ((id1, id2) :: ident_pairs) env u1 u2;
           set_type_module_scope scope1 id1;
           set_type_module_scope scope2 id2;
           old_env := Env.copy_local ~from:!env !old_env
@@ -3584,8 +3584,8 @@ let rec moregen inst_nongen type_pairs ident_pairs env t1 t2 =
                 (moregen inst_nongen type_pairs ident_pairs env)
           | (Tunivar _, Tunivar _) ->
               unify_univar t1' t2' !univar_pairs
-          | ( Tfunctor (id1, ((p1, n1, tl1) as pack1), t1)
-            , Tfunctor (id2, ((p2, n2, tl2) as pack2), t2) ) ->
+          | ( Tfunctor (id1, ((p1, n1, tl1) as pack1), u1)
+            , Tfunctor (id2, ((p2, n2, tl2) as pack2), u2) ) ->
               begin try
                 unify_package ident_pairs env
                   (moregen_list inst_nongen type_pairs ident_pairs env)
@@ -3602,7 +3602,7 @@ let rec moregen inst_nongen type_pairs ident_pairs env t1 t2 =
               let scope2 = Ident.scope id2 in
               set_type_module_scope t2.level id2;
               moregen inst_nongen type_pairs ((id1, id2) :: ident_pairs)
-                env t1 t2;
+                env u1 u2;
               set_type_module_scope scope1 id1;
               set_type_module_scope scope2 id2
           | (_, _) ->
@@ -3885,8 +3885,8 @@ let rec eqtype rename type_pairs ident_pairs subst env t1 t2 =
                 (eqtype rename type_pairs ident_pairs subst env)
           | (Tunivar _, Tunivar _) ->
               unify_univar t1' t2' !univar_pairs
-          | ( Tfunctor (id1, ((p1, n1, tl1) as pack1), t1)
-            , Tfunctor (id2, ((p2, n2, tl2) as pack2), t2) ) ->
+          | ( Tfunctor (id1, ((p1, n1, tl1) as pack1), u1)
+            , Tfunctor (id2, ((p2, n2, tl2) as pack2), u2) ) ->
               begin try
                 unify_package ident_pairs env
                   (eqtype_list rename type_pairs ident_pairs subst env)
@@ -3903,7 +3903,7 @@ let rec eqtype rename type_pairs ident_pairs subst env t1 t2 =
               let scope2 = Ident.scope id2 in
               set_type_module_scope t2.level id2;
               eqtype rename type_pairs ((id1, id2) :: ident_pairs) subst env
-                t1 t2;
+                u1 u2;
               set_type_module_scope scope1 id1;
               set_type_module_scope scope2 id2;
           | (_, _) ->
