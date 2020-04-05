@@ -1547,7 +1547,8 @@ let rec copy_sep cleanup_scope fixed free ?type_modules bound visited ty =
     let t = newvar() in          (* Stub *)
     let visited =
       match ty.desc with
-        Tarrow _ | Ttuple _ | Tvariant _ | Tconstr _ | Tobject _ | Tpackage _ ->
+      | Tarrow _ | Ttuple _ | Tvariant _ | Tconstr _ | Tobject _ | Tpackage _
+      | Tfunctor _ ->
           (ty,(t,bound)) :: visited
       | _ -> visited in
     let copy_rec = copy_sep cleanup_scope fixed free ?type_modules bound visited in
