@@ -568,9 +568,9 @@ and transl_type_aux env policy styp =
       let env = Env.add_module name.txt Mp_present mty_type env in
       let cty = transl_type env policy st in
       end_def();
-      generalize cty.ctyp_type;
-      Btype.set_type_module_scope original_name_scope name.txt;
       let ty = newty (Tfunctor (name.txt, pack_ty, cty.ctyp_type)) in
+      generalize ty;
+      Btype.set_type_module_scope original_name_scope name.txt;
       ctyp (Ttyp_functor (name, pack, cty)) ty
 
 and transl_poly_type env policy t =
