@@ -538,6 +538,7 @@ let mty_of_package env pack = !mty_of_package' env pack
    * This will erase the [abbrev_memo] of all [Tconstr] nodes.
    * This will destroy physical equality between [Tobject] type name
      references.
+   * This will copy all rows, destroying references shared between fields.
 *)
 let rec subst_type_modules_expr id_pairs ty =
   let desc =
@@ -551,6 +552,37 @@ let rec subst_type_modules_expr id_pairs ty =
         let id' = Ident.create_type_module (Ident.name id) in
         let t = subst_type_modules_expr ((id, id') :: id_pairs) t in
         Tfunctor (id', (p, nl, tl), t)
+    | Tvariant row0 ->
+        let row = row_repr row0 in
+        let more = repr row.row_more in
+        let fixed = is_Tvar more in
+        let keep = fixed && more.level <> generic_level in
+        let more' = subst_type_modules_expr id_pairs more in
+        let row' =
+          let f = subst_type_modules_expr id_pairs in
+          let fields = List.map
+              (fun (l, fi) -> l,
+                match row_field_repr fi with
+                | Rpresent(Some ty) -> Rpresent(Some(f ty))
+                | Reither(c, tl, m, e) ->
+                    let e = if keep then e else ref None in
+                    let m = if is_fixed row then fixed else m in
+                    let tl = List.map f tl in
+                    Reither(c, tl, m, e)
+                | _ -> fi)
+              row.row_fields in
+          let name =
+            match row.row_name with
+            | None -> None
+            | Some (path, tl) ->
+                Some (Path.subst_type_modules id_pairs path, List.map f tl)
+          in
+          let row_fixed = if fixed then row.row_fixed else None in
+          { row_fields = fields; row_more = more';
+            row_bound = (); row_fixed;
+            row_closed = row.row_closed; row_name = name; }
+        in
+        Tvariant row'
     | desc ->
         let desc = subst_type_modules id_pairs desc in
         copy_type_desc (subst_type_modules_expr id_pairs) desc
