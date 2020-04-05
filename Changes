@@ -5,6 +5,11 @@ Working version
 
 ### Language features
 
+- #9187: Type-system support for functions parameterised by modules.
+  Syntax: "{M : S} -> ...", where "..." can refer to types in M.
+  Inspired by https://arxiv.org/pdf/1512.01895.pdf.
+  (Matthew Ryan, review by Leo White)
+
 - #8820, #9166: quoted extensions: {%foo|...|} is lighter syntax for
   [%foo {||}], and {%foo bar|...|bar} for [%foo {bar|...|bar}].
   (Gabriel Radanne, Leo White, Gabriel Scherer and Pieter Goetschalckx,
