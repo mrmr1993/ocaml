@@ -529,7 +529,7 @@ let rec filter_row_fields erase = function
 
 let mty_of_package' = ref (fun _ _ -> assert false)
 
-let mty_of_package = !mty_of_package'
+let mty_of_package env pack = !mty_of_package' env pack
 
 (* Naive copy of a type, substituting identifiers for type modules.
    Warning:
