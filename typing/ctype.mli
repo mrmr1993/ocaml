@@ -158,6 +158,7 @@ val merge_row_fields:
 val filter_row_fields:
         bool -> (label * row_field) list -> (label * row_field) list
 
+val mty_of_package : Env.t -> type_package -> module_type
 val with_type_module: Env.t -> int -> Ident.t -> type_package ->
                       (Env.t -> 'a) -> 'a
 (** Attach a type module at the given level and run the callback function with

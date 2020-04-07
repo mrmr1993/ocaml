@@ -220,7 +220,7 @@ let rec transl_exp e =
   let eval_once =
     (* Whether classes for immediate objects must be cached *)
     match e.exp_desc with
-      Texp_function _ | Texp_for _ | Texp_while _ -> false
+      Texp_function _ | Texp_for _ | Texp_while _ | Texp_functor _ -> false
     | _ -> true
   in
   if eval_once then transl_exp0 e else
@@ -573,6 +573,32 @@ and transl_exp0 e =
           Llet(pure, Pgenval, oid,
                !transl_module Tcoerce_none None od.open_expr, body)
       end
+  | Texp_functor (id, _pack, body) ->
+      let name = Ident.create_local "*functor*" in
+      let kind = Curried in
+      let params = [name, Pgenval] in
+      let return = value_kind body.exp_env body.exp_type in
+      let body =
+        let defining_expr =
+          Levent (Lvar name, {
+            lev_loc = e.exp_loc;
+            lev_kind = Lev_module_definition id.txt;
+            lev_repr = None;
+            lev_env = Env.empty;
+          })
+        in
+        Llet(Strict, Pgenval, id.txt, defining_expr, transl_exp body)
+      in
+      let attr = default_function_attribute in
+      let loc = e.exp_loc in
+      let lam = Lfunction{kind; params; return; body; attr; loc} in
+      Translattribute.add_function_attributes lam loc e.exp_attributes
+  | Texp_functor_apply (funct, _path, modl) ->
+      let arg =
+        (* TODO: This is a hack. *)
+        {e with exp_desc=Texp_pack modl }
+      in
+      transl_apply (transl_exp funct) [(Nolabel, Some arg)] e.exp_loc
 
 and pure_module m =
   match m.mod_desc with
