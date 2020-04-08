@@ -2192,6 +2192,8 @@ expr:
   | FUN ext_attributes labeled_simple_pattern fun_def
       { let (l,o,p) = $3 in
         Pexp_fun(l, o, p, $4), $2 }
+  | FUN ext_attributes LBRACE mkrhs(UIDENT) COLON module_type RBRACE fun_def
+      { Pexp_functor ($4, package_type_of_module_type $6, $8), $2 }
   | FUN ext_attributes LPAREN TYPE lident_list RPAREN fun_def
       { (mk_newtypes ~loc:$sloc $5 $7).pexp_desc, $2 }
   | MATCH ext_attributes seq_expr WITH match_cases
@@ -2513,6 +2515,9 @@ strict_binding:
       { let (l, o, p) = $1 in ghexp ~loc:$sloc (Pexp_fun(l, o, p, $2)) }
   | LPAREN TYPE lident_list RPAREN fun_binding
       { mk_newtypes ~loc:$sloc $3 $5 }
+  | mkexp(LBRACE mkrhs(UIDENT) COLON module_type RBRACE fun_binding
+      { Pexp_functor ($2, package_type_of_module_type $4, $6) })
+      { $1 }
 ;
 %inline match_cases:
   xs = preceded_or_separated_nonempty_llist(BAR, match_case)
@@ -2540,6 +2545,9 @@ fun_def:
       }
   | LPAREN TYPE lident_list RPAREN fun_def
       { mk_newtypes ~loc:$sloc $3 $5 }
+  | mkexp(LBRACE mkrhs(UIDENT) COLON module_type RBRACE fun_def
+      { Pexp_functor ($2, package_type_of_module_type $4, $6) })
+      { $1 }
 ;
 %inline expr_comma_list:
   es = separated_nontrivial_llist(COMMA, expr)
