@@ -2142,7 +2142,7 @@ let get_gadt_equations_level () =
 (* a local constraint can be added only if the rhs
    of the constraint does not contain any Tvars.
    They need to be removed using this function *)
-let reify env id_pairs t =
+let reify env t =
   let fresh_constr_scope = get_gadt_equations_level () in
   let create_fresh_constr lev name =
     let name = match name with Some s -> "$'"^s | _ -> "$" in
@@ -2187,11 +2187,12 @@ let reify env id_pairs t =
           iter_row (iterator env id_pairs) r
       | Tconstr (p, _, _) when is_object_type p ->
           iter_type_expr (iterator env id_pairs) (full_expand !env id_pairs ty)
+      (* TODO: Throw an error here if a type refers to an unscoped identifier. *)
       | _ ->
           iter_type_expr (iterator env id_pairs) ty
     end
   in
-  iterator env id_pairs t
+  iterator env [] t
 
 let is_newtype env p =
   try
@@ -2716,7 +2717,7 @@ and unify3 env t1 t1' t2 t2' =
                     let snap = snapshot () in
                     try unify env t1 t2 with Unify _ ->
                       backtrack snap;
-                      reify env [] t1; reify env [] t2
+                      reify env t1; reify env t2
                   end)
               inj (List.combine tl1 tl2)
       | (Tconstr (path,[],_),
@@ -2731,15 +2732,15 @@ and unify3 env t1 t1' t2 t2' =
           add_gadt_equation env source destination
       | (Tconstr (path,[],_), _)
         when is_instantiable !env path && !generate_equations ->
-          reify env [] t2';
+          reify env t2';
           add_gadt_equation env path t2'
       | (_, Tconstr (path,[],_))
         when is_instantiable !env path && !generate_equations ->
-          reify env [] t1';
+          reify env t1';
           add_gadt_equation env path t1'
       | (Tconstr (_,_,_), _) | (_, Tconstr (_,_,_)) when !umode = Pattern ->
-          reify env [] t1';
-          reify env [] t2';
+          reify env t1';
+          reify env t2';
           if !generate_equations then mcomp !env t1' t2'
       | (Tobject (fi1, nm1), Tobject (fi2, _)) ->
           unify_fields env fi1 fi2;
@@ -2760,8 +2761,8 @@ and unify3 env t1 t1' t2 t2' =
             try unify_row env row1 row2
             with Unify _ ->
               backtrack snap;
-              reify env [] t1';
-              reify env [] t2';
+              reify env t1';
+              reify env t2';
               if !generate_equations then mcomp !env t1' t2'
           end
       | (Tfield(f,kind,_,rem), Tnil) | (Tnil, Tfield(f,kind,_,rem)) ->
@@ -2790,7 +2791,7 @@ and unify3 env t1 t1' t2 t2' =
               t1.level p1 n1 tl1 t2.level p2 n2 tl2
           with Not_found ->
             if !umode = Expression then raise (Unify []);
-            List.iter (reify env []) (tl1 @ tl2);
+            List.iter (reify env) (tl1 @ tl2);
             (* if !generate_equations then List.iter2 (mcomp !env) tl1 tl2 *)
           end
       | (Tnil,  Tconstr _ ) -> raise (Unify Trace.[Obj(Abstract_row Second)])
