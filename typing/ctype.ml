@@ -1976,34 +1976,34 @@ let rec unify_univar t1 t2 = function
 
 (* Test the occurrence of free univars in a type *)
 (* that's way too expensive. Must do some kind of caching *)
-let occur_univar env ty =
+let occur_univar env id_pairs ty =
   let visited = ref TypeMap.empty in
-  let rec occur_rec bound ty =
+  let rec occur_rec bound env id_pairs ty =
     let ty = repr ty in
     if not_marked_node ty then
       if TypeSet.is_empty bound then
-        (flip_mark_node ty; occur_desc bound ty)
+        (flip_mark_node ty; occur_desc bound env id_pairs ty)
       else try
         let bound' = TypeMap.find ty !visited in
         if TypeSet.exists (fun x -> not (TypeSet.mem x bound)) bound' then begin
           visited := TypeMap.add ty (TypeSet.inter bound bound') !visited;
-          occur_desc bound ty
+          occur_desc bound env id_pairs ty
         end
       with Not_found ->
         visited := TypeMap.add ty bound !visited;
-        occur_desc bound ty
-  and occur_desc bound ty =
+        occur_desc bound env id_pairs ty
+  and occur_desc bound env id_pairs ty =
       match ty.desc with
         Tunivar _ ->
           if not (TypeSet.mem ty bound) then
             raise Trace.(Unify [escape (Univ ty)])
       | Tpoly (ty, tyl) ->
           let bound = List.fold_right TypeSet.add (List.map repr tyl) bound in
-          occur_rec bound  ty
+          occur_rec bound env id_pairs ty
       | Tconstr (_, [], _) -> ()
       | Tconstr (p, tl, _) ->
           begin try
-            let td = Env.find_type p env in
+            let td = Env.find_type (Path.subst id_pairs p) env in
             List.iter2
               (fun t v ->
                 (* The null variance only occurs in type abbreviations and
@@ -2013,15 +2013,16 @@ let occur_univar env ty =
                    in this position. Physical expansion, as done in `occur`,
                    would be costly here, since we need to check inside
                    object and variant types too. *)
-                if not Variance.(eq v null) then occur_rec bound t)
+                if not Variance.(eq v null) then
+                  occur_rec bound env id_pairs t)
               tl td.type_variance
           with Not_found ->
-            List.iter (occur_rec bound) tl
+            List.iter (occur_rec bound env id_pairs) tl
           end
-      | _ -> iter_type_expr (occur_rec bound) ty
+      | _ -> iter_type_expr (occur_rec bound env id_pairs) ty
   in
   Misc.try_finally (fun () ->
-      occur_rec TypeSet.empty ty
+      occur_rec TypeSet.empty env id_pairs ty
     )
     ~always:(fun () -> unmark_type ty)
 
@@ -2594,7 +2595,7 @@ let unify_eq t1 t2 =
 let unify1_var env t1 t2 =
   assert (is_Tvar t1);
   occur env [] t1 t2;
-  occur_univar env t2;
+  occur_univar env [] t2;
   let d1 = t1.desc in
   link_type t1 t2;
   try
@@ -2731,11 +2732,11 @@ and unify3 env t1 t1' t2 t2' =
       link_type t1' t2'
   | (Tvar _, _) ->
       occur !env [] t1' t2;
-      occur_univar !env t2;
+      occur_univar !env [] t2;
       link_type t1' t2;
   | (_, Tvar _) ->
       occur !env [] t2' t1;
-      occur_univar !env t1;
+      occur_univar !env [] t1;
       link_type t2' t1;
   | (Tfield _, Tfield _) -> (* special case for GADTs *)
       unify_fields env t1' t2'
@@ -3102,7 +3103,7 @@ and unify_row_field env fixed1 fixed2 rm1 rm2 l f1 f2 =
       (* PR#6744 *)
       let split_univars =
         List.partition
-          (fun ty -> try occur_univar !env ty; true with Unify _ -> false) in
+          (fun ty -> try occur_univar !env [] ty; true with Unify _ -> false) in
       let (tl1',tlu1) = split_univars tl1'
       and (tl2',tlu2) = split_univars tl2' in
       begin match tlu1, tlu2 with
@@ -3110,7 +3111,7 @@ and unify_row_field env fixed1 fixed2 rm1 rm2 l f1 f2 =
       | (tu1::tlu1), _ :: _ ->
           (* Attempt to merge all the types containing univars *)
           List.iter (unify env tu1) (tlu1@tlu2)
-      | (tu::_, []) | ([], tu::_) -> occur_univar !env tu
+      | (tu::_, []) | ([], tu::_) -> occur_univar !env [] tu
       end;
       (* Is this handling of levels really principal? *)
       List.iter (fun ty ->
@@ -3325,7 +3326,7 @@ let moregen_occur env level ty =
     unmark_type ty; raise (Unify [])
   end;
   (* also check for free univars *)
-  occur_univar env ty;
+  occur_univar env [] ty;
   update_level env [] level ty
 
 let may_instantiate inst_nongen t1 =
