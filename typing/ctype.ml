@@ -804,32 +804,36 @@ let rec normalize_package_path env p =
       | _ -> p
 
 let check_scope_escape env level ty =
-  let rec loop ty =
+  let rec loop env id_pairs ty =
     let ty = repr ty in
     if ty.level >= lowest_level then begin
       ty.level <- pivot_level - ty.level;
       if level < ty.scope then
         raise(Trace.scope_escape ty);
       begin match ty.desc with
-      | Tconstr (p, _, _) when level < Path.scope p ->
-          begin match !forward_try_expand_once env [] ty with
-          | ty' -> aux ty'
+      | Tconstr (p, _, _) when level < Path.scope_subst id_pairs p ->
+          begin match !forward_try_expand_once env id_pairs ty with
+          | ty' -> aux env id_pairs ty'
           | exception Cannot_expand ->
               raise Trace.(Unify [escape (Constructor p)])
           end
-      | Tpackage (p, nl, tl) when level < Path.scope p ->
-          let p' = normalize_package_path env p in
+      | Tpackage (p, nl, tl) when level < Path.scope_subst id_pairs p ->
+          let p' =
+            p |> Path.subst id_pairs
+              |> normalize_package_path env
+              |> Path.unsubst id_pairs
+          in
           if Path.same p p' then raise Trace.(Unify [escape (Module_type p)]);
-          aux { ty with desc = Tpackage (p', nl, tl) }
+          aux env id_pairs { ty with desc = Tpackage (p', nl, tl) }
       | _ ->
-        iter_type_expr loop ty
+        iter_type_expr (loop env id_pairs) ty
       end;
     end
-  and aux ty =
-    loop ty;
+  and aux env id_pairs ty =
+    loop env id_pairs ty;
     unmark_type ty
   in
-  try aux ty;
+  try aux env [] ty;
   with Unify [Trace.Escape x] ->
     raise Trace.(Unify[Escape { x with context = Some ty }])
 
