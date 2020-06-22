@@ -1564,11 +1564,6 @@ let subst env id_pairs level priv abbrev ty params args body =
     abbreviations := abbrev;
     let (params', body') = instance_parameterized_type params body in
     abbreviations := ref Mnil;
-    (* TODO: This will fail in some cases involving substituted identifiers.
-       In particular, this will fail escape checks, since we are attempting to
-       unify a type variable with terms that may include locally bound
-       identifiers.
-    *)
     !unify' env id_pairs id_pairs body0 body';
     List.iter2 (!unify' env id_pairs id_pairs) params' args;
     current_level := old_level;
@@ -2660,20 +2655,24 @@ let unify_eq t1 t2 =
       try TypePairs.find unify_eq_set (order_type_pair t1 t2); true
       with Not_found -> false
 
-let unify1_var env id_pairs t1 t2 =
+let unify1_var ~stub_unify env id_pairs t1 t2 =
   assert (is_Tvar t1);
-  (* NOTE: we pass [id_pairs] here to ensure that an unscoped indentifier
-     doesn't get misdiagnosed as an occurence error.
-  *)
   occur env id_pairs t1 t2;
-  occur_univar_or_unscoped env ~pre_id_pairs:id_pairs [] t2;
+  let id_pairs, pre_id_pairs =
+    (* If the target variable is a stub, provide the full [id_pairs].
+       Otherwise, provide it as [pre_id_pairs] to check identifier escapes.
+    *)
+    if stub_unify then id_pairs, []
+    else [], id_pairs
+  in
+  occur_univar_or_unscoped env ~pre_id_pairs id_pairs t2;
   let d1 = t1.desc in
   link_type t1 t2;
   try
     (* We need not pass [id_pairs] here: the check above guarantees that the
        substituted identifiers do not appear in [t2].
     *)
-    update_level env [] t1.level t2;
+    update_level env id_pairs t1.level t2;
     update_scope t1.scope t2
   with Unify _ as e ->
     Private_type_expr.set_desc t1 d1;
@@ -2708,8 +2707,12 @@ let record_equation t1 t2 =
       abbreviated.  It would be possible to check whether some
       information is indeed lost, but it probably does not worth it.
 *)
+(* The [stub_unify] argument disables identifier escope checks. This argument
+   is shallow: it should only be used when one of the arguments is a stub
+   [Tvar], and so is not passed to recursive calls to [unify] and friends.
+*)
 
-let rec unify (env:Env.t ref) id_pairs1 id_pairs2 t1 t2 =
+let rec unify ?(stub_unify = false) (env:Env.t ref) id_pairs1 id_pairs2 t1 t2 =
   (* First step: special cases (optimizations) *)
   if t1 == t2 then () else
   let t1 = repr t1 in
@@ -2721,13 +2724,13 @@ let rec unify (env:Env.t ref) id_pairs1 id_pairs2 t1 t2 =
     type_changed := true;
     begin match (t1.desc, t2.desc) with
       (Tvar _, Tconstr _) when deep_occur t1 t2 ->
-        unify2 env id_pairs1 id_pairs2 t1 t2
+        unify2 ~stub_unify env id_pairs1 id_pairs2 t1 t2
     | (Tconstr _, Tvar _) when deep_occur t2 t1 ->
-        unify2 env id_pairs1 id_pairs2 t1 t2
+        unify2 ~stub_unify env id_pairs1 id_pairs2 t1 t2
     | (Tvar _, _) ->
-        unify1_var !env id_pairs2 t1 t2
+        unify1_var ~stub_unify !env id_pairs2 t1 t2
     | (_, Tvar _) ->
-        unify1_var !env id_pairs1 t2 t1
+        unify1_var ~stub_unify !env id_pairs1 t2 t1
     | (Tunivar _, Tunivar _) ->
         unify_univar t1 t2 !univar_pairs;
         update_level !env id_pairs2 t1.level t2;
@@ -2765,7 +2768,7 @@ let rec unify (env:Env.t ref) id_pairs1 id_pairs2 t1 t2 =
     reset_trace_gadt_instances reset_tracing;
     raise( Unify (Trace.diff t1 t2 :: trace) )
 
-and unify2 env id_pairs1 id_pairs2 t1 t2 =
+and unify2 ?(stub_unify = false) env id_pairs1 id_pairs2 t1 t2 =
   (* Second step: expansion of abbreviations *)
   (* Expansion may change the representative of the types. *)
   ignore (expand_head_unif !env id_pairs1 t1);
@@ -2791,12 +2794,13 @@ and unify2 env id_pairs1 id_pairs2 t1 t2 =
     else (t1, t2)
   in
   if unify_eq t1 t1' || not (unify_eq t2 t2') then
-    unify3 env id_pairs1 id_pairs2 t1 t1' t2 t2'
+    unify3 ~stub_unify env id_pairs1 id_pairs2 t1 t1' t2 t2'
   else
-    try unify3 env id_pairs2 id_pairs1 t2 t2' t1 t1' with Unify trace ->
+    try unify3 ~stub_unify env id_pairs2 id_pairs1 t2 t2' t1 t1'
+    with Unify trace ->
       raise (Unify (Trace.swap trace))
 
-and unify3 env id_pairs1 id_pairs2 t1 t1' t2 t2' =
+and unify3 ?(stub_unify = false) env id_pairs1 id_pairs2 t1 t1' t2 t2' =
   (* Third step: truly unification *)
   (* Assumes either [t1 == t1'] or [t2 != t2'] *)
   let d1 = t1'.desc and d2 = t2'.desc in
@@ -2808,11 +2812,19 @@ and unify3 env id_pairs1 id_pairs2 t1 t1' t2 t2' =
       link_type t1' t2'
   | (Tvar _, _) ->
       occur !env id_pairs2 t1' t2;
-      occur_univar_or_unscoped !env ~pre_id_pairs:id_pairs2 [] t2;
+      let id_pairs, pre_id_pairs =
+        if stub_unify then id_pairs2, []
+        else [], id_pairs2
+      in
+      occur_univar_or_unscoped !env ~pre_id_pairs id_pairs t2;
       link_type t1' t2;
   | (_, Tvar _) ->
       occur !env id_pairs1 t2' t1;
-      occur_univar_or_unscoped !env ~pre_id_pairs:id_pairs1 [] t1;
+      let id_pairs, pre_id_pairs =
+        if stub_unify then id_pairs1, []
+        else [], id_pairs1
+      in
+      occur_univar_or_unscoped !env ~pre_id_pairs id_pairs t1;
       link_type t2' t1;
   | (Tfield _, Tfield _) -> (* special case for GADTs *)
       unify_fields env id_pairs1 id_pairs2 t1' t2'
@@ -3292,10 +3304,10 @@ and unify_row_field env id_pairs1 id_pairs2 fixed1 fixed2 rm1 rm2 l f1 f2 =
       if_not_fixed second (fun () -> set_row_field e2 f1)
   | _ -> raise (Unify [])
 
-let unify env id_pairs1 id_pairs2 ty1 ty2 =
+let unify ?stub_unify env id_pairs1 id_pairs2 ty1 ty2 =
   let snap = Btype.snapshot () in
   try
-    unify env id_pairs1 id_pairs2 ty1 ty2
+    unify ?stub_unify env id_pairs1 id_pairs2 ty1 ty2
   with
     Unify trace ->
       undo_compress snap;
@@ -3324,7 +3336,7 @@ let unify_var env id_pairs1 id_pairs2 t1 t2 =
   if t1 == t2 then () else
   match t1.desc, t2.desc with
     Tvar _, Tconstr _ when deep_occur t1 t2 ->
-      unify (ref env) id_pairs1 id_pairs2 t1 t2
+      unify ~stub_unify:true (ref env) id_pairs1 id_pairs2 t1 t2
   | Tvar _, _ ->
       let reset_tracing = check_trace_gadt_instances env in
       begin try
@@ -3341,7 +3353,7 @@ let unify_var env id_pairs1 id_pairs2 t1 t2 =
         raise (Unify expanded_trace)
       end
   | _ ->
-      unify (ref env) id_pairs1 id_pairs2 t1 t2
+      unify ~stub_unify:true (ref env) id_pairs1 id_pairs2 t1 t2
 
 let _ = unify' := unify_var
 
@@ -4357,7 +4369,6 @@ let rec build_subtype env id_pairs visited loops posi level t =
               if p' == p then Some (p, tl1) else None
           in
           set_type_desc t'' (Tobject (ty1', ref nm));
-          (* TODO: This can fail in cases where there are substitutions. *)
           (try unify_var env id_pairs id_pairs ty t with
             Unify _ -> assert false);
           (t'', Changed)
