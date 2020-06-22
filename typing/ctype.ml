@@ -1950,9 +1950,9 @@ let rec unify_univar t1 t2 = function
       end
   | [] -> raise (Unify [])
 
-(* Test the occurrence of free univars in a type *)
+(* Test the occurrence of free univars and unscoped identifiers in a type *)
 (* that's way too expensive. Must do some kind of caching *)
-let occur_univar env id_pairs ty =
+let occur_univar_or_unscoped env ?(pre_id_pairs = []) id_pairs ty =
   let visited = ref TypeMap.empty in
   let rec occur_rec bound env id_pairs ty =
     let ty = repr ty in
@@ -1977,7 +1977,8 @@ let occur_univar env id_pairs ty =
           let bound = List.fold_right TypeSet.add (List.map repr tyl) bound in
           occur_rec bound env id_pairs ty
       | Tconstr (p, _, _)
-        when Option.is_some (Path.find_unscoped_subst id_pairs p) ->
+        when pre_id_pairs <> [] &&
+             Option.is_some (Path.find_unscoped_subst id_pairs p) ->
           begin match Path.find_unscoped_subst id_pairs p with
           | Some id ->
               raise Trace.(Unify [escape (Module (Pident id))])
@@ -2045,7 +2046,7 @@ let univars_escape env id_pairs univar_pairs vl ty =
           begin try
             let td = Env.find_type (Path.subst id_pairs p) env in
             List.iter2
-              (* see occur_univar *)
+              (* see occur_univar_or_unscoped *)
               (fun t v -> if not Variance.(eq v null) then occur t)
               tl td.type_variance
           with Not_found ->
@@ -2232,7 +2233,8 @@ let reify env ?(pre_id_pairs = []) id_pairs t =
       | Tconstr (p, _, _) when is_object_type p ->
           iter_type_expr (iterator env id_pairs) (full_expand !env id_pairs ty)
       | Tconstr (p, _, _)
-        when Option.is_some (Path.find_unscoped_subst id_pairs p) ->
+        when pre_id_pairs <> [] &&
+             Option.is_some (Path.find_unscoped_subst id_pairs p) ->
         (* Unscoped identifier, attempt to expand. *)
         let raise_identifier_escape () =
           match Path.find_unscoped_subst id_pairs p with
@@ -2629,8 +2631,7 @@ let unify1_var env id_pairs t1 t2 =
      doesn't get misdiagnosed as an occurence error.
   *)
   occur env id_pairs t1 t2;
-  (* TODO: Check that [t2] doesn't contain any unscoped identifiers. *)
-  occur_univar env [] t2;
+  occur_univar_or_unscoped env ~pre_id_pairs:id_pairs [] t2;
   let d1 = t1.desc in
   link_type t1 t2;
   try
@@ -2742,13 +2743,11 @@ and unify3 env id_pairs1 id_pairs2 t1 t1' t2 t2' =
       link_type t1' t2'
   | (Tvar _, _) ->
       occur !env id_pairs2 t1' t2;
-      (* TODO: Check that [t2] doesn't contain any unscoped identifiers. *)
-      occur_univar !env [] t2;
+      occur_univar_or_unscoped !env ~pre_id_pairs:id_pairs2 [] t2;
       link_type t1' t2;
   | (_, Tvar _) ->
       occur !env id_pairs1 t2' t1;
-      (* TODO: Check that [t1] doesn't contain any unscoped identifiers. *)
-      occur_univar !env [] t1;
+      occur_univar_or_unscoped !env ~pre_id_pairs:id_pairs1 [] t1;
       link_type t2' t1;
   | (Tfield _, Tfield _) -> (* special case for GADTs *)
       unify_fields env id_pairs1 id_pairs2 t1' t2'
@@ -3160,7 +3159,8 @@ and unify_row_field env id_pairs1 id_pairs2 fixed1 fixed2 rm1 rm2 l f1 f2 =
       let split_univars id_pairs =
         List.partition
           (fun ty ->
-            try occur_univar !env id_pairs ty; true with Unify _ -> false)
+            try occur_univar_or_unscoped !env id_pairs ty; true
+            with Unify _ -> false)
       in
       let (tl1',tlu1) = split_univars id_pairs1 tl1'
       and (tl2',tlu2) = split_univars id_pairs2 tl2' in
@@ -3170,8 +3170,8 @@ and unify_row_field env id_pairs1 id_pairs2 fixed1 fixed2 rm1 rm2 l f1 f2 =
           (* Attempt to merge all the types containing univars *)
           List.iter (unify env id_pairs1 id_pairs1 tu1) tlu1;
           List.iter (unify env id_pairs1 id_pairs2 tu1) tlu2
-      | (tu1::_, []) -> occur_univar !env id_pairs1 tu1
-      | ([], tu2::_) -> occur_univar !env id_pairs2 tu2
+      | (tu1::_, []) -> occur_univar_or_unscoped !env id_pairs1 tu1
+      | ([], tu2::_) -> occur_univar_or_unscoped !env id_pairs2 tu2
       end;
       (* Is this handling of levels really principal? *)
       List.iter (fun ty ->
@@ -3369,7 +3369,7 @@ let filter_self_method env lab priv meths ty =
    Update the level of [ty]. First check that the levels of generic
    variables from the subject are not lowered.
 *)
-let moregen_occur env level ty =
+let moregen_occur env id_pairs level ty =
   let rec occur ty =
     let ty = repr ty in
     if ty.level > level then begin
@@ -3385,7 +3385,7 @@ let moregen_occur env level ty =
   end;
   (* also check for free univars *)
   (* TODO: Check that [ty] doesn't contain any unscoped identifiers. *)
-  occur_univar env [] ty;
+  occur_univar_or_unscoped env ~pre_id_pairs:id_pairs [] ty;
   update_level env [] level ty
 
 let may_instantiate inst_nongen t1 =
@@ -3401,7 +3401,7 @@ let rec moregen inst_nongen type_pairs env id_pairs1 id_pairs2 t1 t2 =
   try
     match (t1.desc, t2.desc) with
       (Tvar _, _) when may_instantiate inst_nongen t1 ->
-        moregen_occur env t1.level t2;
+        moregen_occur env id_pairs2 t1.level t2;
         update_scope t1.scope t2;
         occur env id_pairs2 t1 t2;
         link_type t1 t2
@@ -3420,7 +3420,7 @@ let rec moregen inst_nongen type_pairs env id_pairs1 id_pairs2 t1 t2 =
           TypePairs.add type_pairs (t1', t2') ();
           match (t1'.desc, t2'.desc) with
             (Tvar _, _) when may_instantiate inst_nongen t1' ->
-              moregen_occur env t1'.level t2;
+              moregen_occur env id_pairs2 t1'.level t2;
               update_scope t1'.scope t2;
               link_type t1' t2
           | (Tarrow (l1, t1, u1, _), Tarrow (l2, t2, u2, _)) when l1 = l2
@@ -3522,7 +3522,7 @@ and moregen_row inst_nongen type_pairs env id_pairs1 id_pairs2 row1 row2 =
       let ext =
         newgenty (Tvariant {row2 with row_fields = r2; row_name = None})
       in
-      moregen_occur env rm1.level ext;
+      moregen_occur env id_pairs2 rm1.level ext;
       update_scope rm1.scope ext;
       link_type rm1 ext
   | Tconstr _, Tconstr _ ->
