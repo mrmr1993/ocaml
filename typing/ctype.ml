@@ -2242,12 +2242,7 @@ let occur_univar_or_unscoped env ?(pre_id_pairs = []) id_pairs ty =
       | Tconstr (p, _, _)
         when pre_id_pairs <> [] &&
              Option.is_some (Path.find_unscoped_subst id_pairs p) ->
-          begin match Path.find_unscoped_subst id_pairs p with
-          | Some id ->
-              raise Trace.(Unify [escape (Module (Pident id))])
-          | None ->
-              assert false
-          end
+          raise Trace.(Unify [escape (Constructor p)])
       | Tconstr (_, [], _) -> ()
       | Tconstr (p, tl, _) ->
           begin try
