@@ -8,6 +8,11 @@ Working version
     'let* x = x in ...' and 'let%ext x = x in ...' respectively.
   (Stephen Dolan, review by Gabriel Scherer)
 
+- #9187: Type-system support for functions parameterised by modules.
+  Syntax: "{M : S} -> ...", where "..." can refer to types in M.
+  Inspired by https://arxiv.org/pdf/1512.01895.pdf.
+  (Matthew Ryan, review by Thomas Refis and Leo White)
+
 ### Runtime system:
 
 - #10025: Track custom blocks (e.g. Bigarray) with Statmemprof
