@@ -13,6 +13,11 @@ Working version
     type !'a t = 'a list
   (Jacques Garrigue, review by Jeremy Yallop and Leo White)
 
+- #9187: Type-system support for functions parameterised by modules.
+  Syntax: "{M : S} -> ...", where "..." can refer to types in M.
+  Inspired by https://arxiv.org/pdf/1512.01895.pdf.
+  (Matthew Ryan, review by Thomas Refis and Leo White)
+
 ### Runtime system:
 
 - #1795, #9543: modernize signal handling on Linux i386, PowerPC, and s390x,
