@@ -5293,13 +5293,15 @@ let rec normalize_type_rec env id_pairs visited ty =
         let fields, row = flatten_fields fi in
         let fi' = build_fields fi.level fields row in
         set_type_desc fi fi'.desc
-    | Tfunctor (id, (p, nl, tl), ty1) ->
+    | Tfunctor (id, (p, _nl, tl), ty1) ->
         List.iter (normalize_type_rec env id_pairs visited) tl;
-        let tl = substitute_ident_pairs_for_env id_pairs tl in
         let p = Path.subst id_pairs p in
         let scoped_id = Ident.create_scoped ~scope:ty.level (Ident.name id) in
+        (* The signature's path may not be present in the printing environment,
+           do not expose the substitutions to avoid an error here.
+        *)
         let env =
-          Env.add_module scoped_id Mp_present (mty_of_package env (p, nl, tl))
+          Env.add_module scoped_id Mp_present (mty_of_package env (p, [], []))
             env
         in
         let id_pairs = (id, scoped_id) :: id_pairs in
