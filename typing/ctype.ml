@@ -2454,11 +2454,10 @@ let rec has_cached_expansion p abbrev =
 (**** Transform error trace ****)
 (* +++ Move it to some other place ? *)
 
-let expand_trace env id_pairs trace =
-  (* TODO: Should use different [id_pairs] when expanding different sides.. *)
+let expand_trace env trace =
   let expand_desc x = match x.Trace.expanded with
     | None ->
-        Trace.{ t = repr x.t; expanded= Some(full_expand env id_pairs x.t) }
+        Trace.{ t = repr x.t; expanded= Some(full_expand env [] x.t) }
     | Some _ -> x in
   Unification_trace.map expand_desc trace
 
@@ -3690,7 +3689,7 @@ let unify ?stub_unify env id_pairs1 id_pairs2 ty1 ty2 =
   with
     Unify trace ->
       undo_compress snap;
-      raise (Unify (expand_trace !env (id_pairs1 @ id_pairs2) trace))
+      raise (Unify (expand_trace !env trace))
 
 let unify_gadt ~equations_level:lev ~allow_recursive (env:Env.t ref) ty1 ty2 =
   try
@@ -3727,7 +3726,7 @@ let unify_var env id_pairs1 id_pairs2 t1 t2 =
       with Unify trace ->
         reset_trace_gadt_instances reset_tracing;
         let expanded_trace =
-          expand_trace env (id_pairs1 @ id_pairs2) @@ Trace.diff t1 t2 :: trace
+          expand_trace env @@ Trace.diff t1 t2 :: trace
         in
         raise (Unify expanded_trace)
       end
@@ -4433,7 +4432,7 @@ let rec moregen_clty trace type_pairs env cty1 cty2 =
     | Cty_arrow (l1, ty1, cty1'), Cty_arrow (l2, ty2, cty2') when l1 = l2 ->
         begin try moregen true type_pairs env ty1 ty2 with Unify trace ->
           raise
-            (Failure [CM_Parameter_mismatch (env, expand_trace env [] trace)])
+            (Failure [CM_Parameter_mismatch (env, expand_trace env trace)])
         end;
         moregen_clty false type_pairs env cty1' cty2'
     | Cty_signature sign1, Cty_signature sign2 ->
@@ -4446,7 +4445,7 @@ let rec moregen_clty trace type_pairs env cty1 cty2 =
           (fun (lab, _k1, t1, _k2, t2) ->
             begin try moregen true type_pairs env t1 t2 with Unify trace ->
               raise (Failure [CM_Meth_type_mismatch
-                                 (lab, env, expand_trace env [] trace)])
+                                 (lab, env, expand_trace env trace)])
            end)
         pairs;
       Vars.iter
@@ -4454,7 +4453,7 @@ let rec moregen_clty trace type_pairs env cty1 cty2 =
            let (_mut', _v', ty') = Vars.find lab sign1.csig_vars in
            try moregen true type_pairs env ty' ty with Unify trace ->
              raise (Failure [CM_Val_type_mismatch
-                                (lab, env, expand_trace env [] trace)]))
+                                (lab, env, expand_trace env trace)]))
         sign2.csig_vars
   | _ ->
       raise (Failure [])
@@ -4569,7 +4568,7 @@ let rec equal_clty trace type_pairs subst env cty1 cty2 =
     | Cty_arrow (l1, ty1, cty1'), Cty_arrow (l2, ty2, cty2') when l1 = l2 ->
         begin try eqtype true type_pairs subst env ty1 ty2 with Unify trace ->
           raise
-            (Failure [CM_Parameter_mismatch (env, expand_trace env [] trace)])
+            (Failure [CM_Parameter_mismatch (env, expand_trace env trace)])
         end;
         equal_clty false type_pairs subst env cty1' cty2'
     | Cty_signature sign1, Cty_signature sign2 ->
@@ -4583,7 +4582,7 @@ let rec equal_clty trace type_pairs subst env cty1 cty2 =
              begin try eqtype true type_pairs subst env t1 t2 with
                Unify trace ->
                  raise (Failure [CM_Meth_type_mismatch
-                                    (lab, env, expand_trace env [] trace)])
+                                    (lab, env, expand_trace env trace)])
              end)
           pairs;
         Vars.iter
@@ -4591,7 +4590,7 @@ let rec equal_clty trace type_pairs subst env cty1 cty2 =
              let (_, _, ty') = Vars.find lab sign1.csig_vars in
              try eqtype true type_pairs subst env ty' ty with Unify trace ->
                raise (Failure [CM_Val_type_mismatch
-                                  (lab, env, expand_trace env [] trace)]))
+                                  (lab, env, expand_trace env trace)]))
           sign2.csig_vars
     | _ ->
         raise
@@ -4685,7 +4684,7 @@ let match_class_declarations env patt_params patt_type subj_params subj_type =
         List.iter2 (fun p s ->
           try eqtype true type_pairs subst env p s with Unify trace ->
             raise (Failure [CM_Type_parameter_mismatch
-                               (env, expand_trace env [] trace)]))
+                               (env, expand_trace env trace)]))
           patt_params subj_params;
      (* old code: equal_clty false type_pairs subst env patt_type subj_type; *)
         equal_clty false type_pairs subst env
@@ -4992,8 +4991,8 @@ let enlarge_type env ty =
 
 let subtypes = TypePairs.create 17
 
-let subtype_error env id_pairs trace =
-  raise (Subtype (expand_trace env id_pairs (List.rev trace), []))
+let subtype_error env trace =
+  raise (Subtype (expand_trace env (List.rev trace), []))
 
 let rec subtype_rec env id_pairs1 id_pairs2 trace t1 t2 cstrs =
   let t1 = repr t1 in
@@ -5130,7 +5129,7 @@ let rec subtype_rec env id_pairs1 id_pairs2 trace t1 t2 cstrs =
 
 and subtype_list env id_pairs1 id_pairs2 trace tl1 tl2 cstrs =
   if List.length tl1 <> List.length tl2 then
-    subtype_error env [] trace;
+    subtype_error env trace;
   List.fold_left2
     (fun cstrs t1 t2 ->
       subtype_rec env id_pairs1 id_pairs2 (Trace.diff t1 t2::trace) t1 t2
@@ -5256,7 +5255,7 @@ let subtype env ty1 ty2 =
          try unify_pairs (ref env) id_pairs1 id_pairs2 t1 t2 pairs
          with Unify trace ->
            let expanded_trace =
-             expand_trace env (id_pairs1 @ id_pairs2) (List.rev trace0)
+             expand_trace env (List.rev trace0)
            in
            raise (Subtype (expanded_trace, List.tl trace)))
       (List.rev cstrs)
