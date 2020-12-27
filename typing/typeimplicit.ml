@@ -57,17 +57,18 @@ open Format
 let report_error ~loc _env = function
   | Ambiguous_functor_argument paths ->
       Location.error_of_printer ~loc (fun ppf () ->
-        fprintf ppf "This implicit argument is ambiguous.@.";
+        fprintf ppf "This implicit argument is ambiguous.@ ";
         begin match paths with
           | [] ->
             fprintf ppf "No candidate instances were found."
           | _ ->
-            fprintf ppf "Could not choose between the candidates:@ %a."
+            fprintf ppf
+              "Could not choose between the candidates:@ @[<hv>%a.@]"
               (pp_print_list ~pp_sep:pp_print_space
                 (fun ppf path -> pp_print_string ppf (Path.name path)))
               paths
         end;
-        fprintf ppf "@.Hint: Consider passing the desired instance directly."
+        fprintf ppf "@ Hint: Consider passing the desired instance directly."
       ) ()
 
 let report_error ~loc env err =
