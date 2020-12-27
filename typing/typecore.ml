@@ -3753,7 +3753,13 @@ and type_expect_
       in
       let new_env = Env.add_module scoped_ident Mp_present mty_type env in
       let new_env = Env.add_implicit_module (Pident scoped_ident) new_env in
+      let outer_env = new_env in
+      let new_env =
+        Env.open_implicit_modules_scope ~scope:(Ctype.get_current_level())
+          new_env
+      in
       let body = type_expect new_env sbody (mk_expected (newvar ())) in
+      let body = add_resolved_implicits_bindings ~outer_env new_env body in
       end_def();
       let ident = Ident.create_unscoped name.txt in
       (* Substitute [scoped_ident] for [ident]. *)
