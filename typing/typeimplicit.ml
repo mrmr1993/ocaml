@@ -10,16 +10,47 @@
 (*                                                                        *)
 (**************************************************************************)
 
+open Typedtree
+
 type error =
   | Ambiguous_functor_argument of Path.t list
 
 exception Error of Location.t * Env.t * error
 
+let wrap_constraint:
+    (Env.t -> module_expr -> Types.module_type -> module_expr) ref =
+  ref (fun _env _me _mty -> assert false)
+
 let resolve_implicits env =
-  List.iter (fun (loc, _id) ->
-      raise (Error (loc, env, Ambiguous_functor_argument [])))
-    (Env.implicit_module_instances env);
-  []
+  let implicit_modules =
+    List.map (fun path -> (path, Env.find_module path env))
+      (Env.implicit_modules env)
+  in
+  List.map (fun (loc, id, mty) ->
+      let candidates =
+        List.filter_map
+          (fun (path, md) ->
+            try
+              let mod_expr =
+                { mod_desc=
+                    Tmod_ident (path, Location.mknoloc (Longident.Lident "_"))
+                ; mod_loc= loc
+                ; mod_type= md.Types.md_type
+                ; mod_env= env
+                ; mod_attributes= [] }
+              in
+              Some (path, !wrap_constraint env mod_expr mty)
+            with _ -> None )
+          implicit_modules
+      in
+      match candidates with
+      | [(path, modl)] ->
+          Ident.set_instantiation id path;
+          (id, loc, modl)
+      | _ ->
+          let candidates = List.map fst candidates in
+          raise (Error (loc, env, Ambiguous_functor_argument candidates)) )
+    (Env.implicit_module_instances env)
 
 open Format
 

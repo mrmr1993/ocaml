@@ -3752,6 +3752,7 @@ and type_expect_
         Ident.create_scoped ~scope:(Ctype.get_current_level()) name.txt
       in
       let new_env = Env.add_module scoped_ident Mp_present mty_type env in
+      let new_env = Env.add_implicit_module (Pident scoped_ident) new_env in
       let body = type_expect new_env sbody (mk_expected (newvar ())) in
       end_def();
       let ident = Ident.create_unscoped name.txt in

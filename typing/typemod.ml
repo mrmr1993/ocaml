@@ -2615,6 +2615,8 @@ let () =
   Typecore.type_open_decl := type_open_decl;
   Typecore.type_package := type_package;
   Typeclass.type_open_descr := type_open_descr;
+  Typeimplicit.wrap_constraint :=
+    (fun env me mty -> wrap_constraint env false me mty Tmodtype_implicit);
   type_module_type_of_fwd := type_module_type_of
 
 

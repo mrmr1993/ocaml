@@ -407,6 +407,7 @@ type t = {
   local_constraints: type_declaration Path.Map.t;
   flags: int;
   implicit_modules: (int * (Location.t * module_data) Ident.Map.t ref) list;
+  implicit_instances: Path.t list
 }
 
 and module_declaration_lazy =
@@ -596,6 +597,7 @@ let empty = {
   flags = 0;
   functor_args = Ident.empty;
   implicit_modules = [];
+  implicit_instances = []
  }
 
 let in_signature b env =
@@ -1284,13 +1286,21 @@ let implicit_module_instances env =
   match env.implicit_modules with
   | [] -> fatal_error "Env.implicit_module_instances"
   | (_scope, implicits) :: _ ->
-      List.map (fun (id, (loc, _)) -> (loc, id))
+      List.map (fun (id, (loc, mda)) ->
+          ( loc
+          , id
+          , (EnvLazy.force subst_modtype_maker mda.mda_declaration).md_type ) )
         (Ident.Map.bindings !implicits)
 
 let implicit_module_scope env =
   match env.implicit_modules with
   | [] -> fatal_error "Env.implicit_module_scope"
   | (scope, _implicits) :: _ -> scope
+
+let add_implicit_module path env =
+  {env with implicit_instances= path :: env.implicit_instances}
+
+let implicit_modules env = env.implicit_instances
 
 (* Copying types associated with values *)
 

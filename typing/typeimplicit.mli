@@ -10,10 +10,15 @@
 (*                                                                        *)
 (**************************************************************************)
 
+open Typedtree
+
 type error =
   | Ambiguous_functor_argument of Path.t list
 
 exception Error of Location.t * Env.t * error
+
+val wrap_constraint:
+  (Env.t -> module_expr -> Types.module_type -> module_expr) ref
 
 val resolve_implicits:
   Env.t -> (Ident.t * Location.t * Typedtree.module_expr) list

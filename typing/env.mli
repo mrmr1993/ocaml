@@ -109,8 +109,11 @@ val is_functor_arg: Path.t -> t -> bool
 val open_implicit_modules_scope: scope:int -> t -> t
 val add_implicit_module_instance:
     Location.t -> Ident.t -> module_type -> t -> unit
-val implicit_module_instances: t -> (Location.t * Ident.t) list
+val implicit_module_instances: t -> (Location.t * Ident.t * module_type) list
 val implicit_module_scope: t -> int
+
+val add_implicit_module: Path.t -> t -> t
+val implicit_modules: t -> Path.t list
 
 val normalize_module_path: Location.t option -> t -> Path.t -> Path.t
 (* Normalize the path to a concrete module.
