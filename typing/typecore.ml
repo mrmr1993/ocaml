@@ -111,6 +111,7 @@ type error =
   | Cannot_infer_signature
   | Not_a_packed_module of type_expr
   | Cannot_infer_functor_signature of type_expr
+  | Ambiguous_functor_argument of Path.t list
   | Unexpected_existential of existential_restriction * string * string list
   | Invalid_interval
   | Invalid_for_loop_index
@@ -3749,7 +3750,8 @@ and type_expect_
         exp_attributes = sexp.pexp_attributes;
         exp_env = env }
 
-  | Pexp_functor_apply (sfunct, lid) ->
+  | Pexp_functor_apply (sfunct, ({txt= Some lid_; _} as lid)) ->
+      let lid_ = mkloc lid_ lid.loc in
       if !Clflags.principal then begin_def ();
       let funct = type_exp env sfunct in
       if !Clflags.principal then begin
@@ -3769,7 +3771,7 @@ and type_expect_
       in
       let (modl, tl') =
         let m =
-          { pmod_desc= Pmod_ident lid
+          { pmod_desc= Pmod_ident lid_
           ; pmod_loc= loc
           ; pmod_attributes= []
         } in
@@ -3780,7 +3782,7 @@ and type_expect_
         raise(Error(loc, env, Expr_type_clash(trace, None, None)))
       end;
       let path =
-        Env.lookup_module_path ~use:true ~loc ~load:true lid.txt env
+        Env.lookup_module_path ~use:true ~loc ~load:true lid_.txt env
       in
       begin_def ();
       let subst = Subst.add_module id path Subst.identity in
@@ -3795,6 +3797,9 @@ and type_expect_
         exp_type = ty_res;
         exp_attributes = sexp.pexp_attributes;
         exp_env = env }
+
+  | Pexp_functor_apply (_sfunct, ({txt= None; _} as lid)) ->
+      raise (Error (lid.loc, env, Ambiguous_functor_argument []))
 
   | Pexp_extension ({ txt = ("ocaml.extension_constructor"
                              |"extension_constructor"); _ },
@@ -5611,6 +5616,20 @@ let report_error ~loc env = function
       Location.errorf ~loc
         "The signature for this functor couldn't be inferred from the type@ %a"
         Printtyp.type_expr ty
+  | Ambiguous_functor_argument paths ->
+      Location.error_of_printer ~loc (fun ppf () ->
+        fprintf ppf "This implicit argument is ambiguous.@.";
+        begin match paths with
+          | [] ->
+            fprintf ppf "No candidate instances were found."
+          | _ ->
+            fprintf ppf "Could not choose between the candidates:@ %a."
+              (pp_print_list ~pp_sep:pp_print_space
+                (fun ppf path -> pp_print_string ppf (Path.name path)))
+              paths
+        end;
+        fprintf ppf "@.Hint: Consider passing the desired instance directly."
+      ) ()
   | Unexpected_existential (reason, name, types) ->
       let reason_str =
         match reason with

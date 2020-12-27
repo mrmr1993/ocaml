@@ -277,7 +277,8 @@ and expression_desc =
         (** let open[!] M in e *)
   | Texp_functor of Ident.t * string loc * package_type * expression
         (** fun {M : S} -> E *)
-  | Texp_functor_apply of expression * Path.t * Longident.t loc * module_expr
+  | Texp_functor_apply of
+      expression * Path.t * Longident.t option loc * module_expr
         (** E {M} *)
 
 and meth =

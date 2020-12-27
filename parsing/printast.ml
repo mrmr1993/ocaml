@@ -51,6 +51,12 @@ let fmt_longident_loc f (x : Longident.t loc) =
   fprintf f "\"%a\" %a" fmt_longident_aux x.txt fmt_location x.loc;
 ;;
 
+let fmt_longident_opt_loc f (x : Longident.t option loc) =
+  fprintf f "\"%a\" %a"
+    fmt_longident_aux (Option.value x.txt ~default:(Longident.Lident "_"))
+    fmt_location x.loc;
+;;
+
 let fmt_string_loc f (x : string loc) =
   fprintf f "\"%s\" %a" x.txt fmt_location x.loc;
 ;;
@@ -405,7 +411,7 @@ and expression i ppf x =
       list i package_with ppf l;
       expression i ppf e
   | Pexp_functor_apply (e, li) ->
-      line i ppf "Pexp_functor_apply %a\n" fmt_longident_loc li;
+      line i ppf "Pexp_functor_apply %a\n" fmt_longident_opt_loc li;
       expression i ppf e
 
 and value_description i ppf x =
