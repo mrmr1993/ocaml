@@ -111,7 +111,6 @@ type error =
   | Cannot_infer_signature
   | Not_a_packed_module of type_expr
   | Cannot_infer_functor_signature of type_expr
-  | Ambiguous_functor_argument of Path.t list
   | Unexpected_existential of existential_restriction * string * string list
   | Invalid_interval
   | Invalid_for_loop_index
@@ -2572,6 +2571,24 @@ let unify_exp env exp expected_ty =
   with Error(loc, env, Expr_type_clash(trace, tfc, None)) ->
     raise (Error(loc, env, Expr_type_clash(trace, tfc, Some exp.exp_desc)))
 
+let add_resolved_implicits_bindings ~outer_env env exp =
+  (* Wrap with letmodule bindings for each instantiated implicit. *)
+  List.fold_left
+    (fun exp (id, loc, modl) ->
+      let pres =
+        match modl.mod_type with
+        | Mty_alias _ -> Mp_absent
+        | _ -> Mp_present
+      in
+      re {
+        exp_desc = Texp_letmodule(Some id, mkloc None loc, pres, modl, exp);
+        exp_loc = loc;
+        exp_extra = []; (* TODO: signal that we can erase while untyping. *)
+        exp_type = exp.exp_type;
+        exp_attributes = [];
+        exp_env = outer_env } )
+    exp (Typeimplicit.resolve_implicits env)
+
 let rec type_exp ?recarg env sexp =
   (* We now delegate everything to type_expect *)
   type_expect ?recarg env sexp (mk_expected (newvar ()))
@@ -2792,9 +2809,7 @@ and type_expect_
       let arg = type_exp arg_env sarg in
       end_def ();
       if maybe_expansive arg then lower_contravariant arg_env arg.exp_type;
-      List.iter (fun (loc, _id) ->
-          raise (Error (loc, arg_env, Ambiguous_functor_argument [])))
-        (Env.implicit_module_instances arg_env);
+      let arg = add_resolved_implicits_bindings ~outer_env:env arg_env arg in
       generalize arg.exp_type;
       let cases, partial =
         type_cases Computation env arg.exp_type ty_expected true loc caselist in
@@ -5141,6 +5156,7 @@ and type_let
     List.map2
       (fun {pvb_expr=sexp; pvb_attributes; _} (pat, slot) ->
         if is_recursive then current_slot := slot;
+        let outer_env = exp_env in
         (* Open a new implicit scope for each binding. *)
         let exp_env =
           Env.open_implicit_modules_scope ~scope:(Ctype.get_current_level())
@@ -5162,9 +5178,9 @@ and type_let
                   type_expect exp_env sexp (mk_expected ty')
               )
             in
-            List.iter (fun (loc, _id) ->
-                raise (Error (loc, exp_env, Ambiguous_functor_argument [])))
-              (Env.implicit_module_instances exp_env);
+            let exp =
+              add_resolved_implicits_bindings ~outer_env exp_env exp
+            in
             exp, Some vars
         | _ ->
             let exp =
@@ -5174,9 +5190,9 @@ and type_let
                   else
                     type_expect exp_env sexp (mk_expected pat.pat_type))
             in
-            List.iter (fun (loc, _id) ->
-                raise (Error (loc, exp_env, Ambiguous_functor_argument [])))
-              (Env.implicit_module_instances exp_env);
+            let exp =
+              add_resolved_implicits_bindings ~outer_env exp_env exp
+            in
             exp, None)
       spat_sexp_list pat_slot_list in
   current_slot := None;
@@ -5315,16 +5331,14 @@ let type_let existential_ctx env rec_flag spat_sexp_list =
 
 let type_expression env sexp =
   Typetexp.reset_type_variables();
-  let env =
+  let exp_env =
     Env.open_implicit_modules_scope ~scope:(Ctype.get_current_level()) env
   in
   begin_def();
-  let exp = type_exp env sexp in
+  let exp = type_exp exp_env sexp in
   end_def();
-  if maybe_expansive exp then lower_contravariant env exp.exp_type;
-  List.iter (fun (loc, _id) ->
-      raise (Error (loc, env, Ambiguous_functor_argument [])))
-    (Env.implicit_module_instances env);
+  if maybe_expansive exp then lower_contravariant exp_env exp.exp_type;
+  let exp = add_resolved_implicits_bindings ~outer_env:env exp_env exp in
   generalize exp.exp_type;
   match sexp.pexp_desc with
     Pexp_ident lid ->
@@ -5681,20 +5695,6 @@ let report_error ~loc env = function
       Location.errorf ~loc
         "The signature for this functor couldn't be inferred from the type@ %a"
         Printtyp.type_expr ty
-  | Ambiguous_functor_argument paths ->
-      Location.error_of_printer ~loc (fun ppf () ->
-        fprintf ppf "This implicit argument is ambiguous.@.";
-        begin match paths with
-          | [] ->
-            fprintf ppf "No candidate instances were found."
-          | _ ->
-            fprintf ppf "Could not choose between the candidates:@ %a."
-              (pp_print_list ~pp_sep:pp_print_space
-                (fun ppf path -> pp_print_string ppf (Path.name path)))
-              paths
-        end;
-        fprintf ppf "@.Hint: Consider passing the desired instance directly."
-      ) ()
   | Unexpected_existential (reason, name, types) ->
       let reason_str =
         match reason with

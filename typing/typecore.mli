@@ -168,7 +168,6 @@ type error =
   | Cannot_infer_signature
   | Not_a_packed_module of type_expr
   | Cannot_infer_functor_signature of type_expr
-  | Ambiguous_functor_argument of Path.t list
   | Unexpected_existential of existential_restriction * string * string list
   | Invalid_interval
   | Invalid_for_loop_index
