@@ -887,6 +887,11 @@ let find_ident_module id env =
 
 let rec find_module_components path env =
   match path with
+  | Pident id when Ident.is_instantiable id ->
+      begin match Ident.instantiation id with
+      | Some path -> find_module_components path env
+      | None -> (find_ident_module id env).mda_components
+      end
   | Pident id -> (find_ident_module id env).mda_components
   | Pdot(p, s) ->
       let sc = find_structure_components p env in
@@ -919,6 +924,15 @@ let find_module ~alias path env =
       let fc = find_functor_components p1 env in
       if alias then md (fc.fcomp_res)
       else md (modtype_of_functor_appl fc p1 p2)
+
+let find_module ~alias path env =
+  match path with
+  | Pident id when Ident.is_instantiable id ->
+      begin match Ident.instantiation id with
+      | Some path -> find_module ~alias path env
+      | None -> find_module ~alias path env
+      end
+  | _ -> find_module ~alias path env
 
 let find_value_full path env =
   match path with
@@ -1031,6 +1045,11 @@ let find_type_descrs p env =
 
 let rec find_module_address path env =
   match path with
+  | Pident id when Ident.is_instantiable id ->
+      begin match Ident.instantiation id with
+      | Some path -> find_module_address path env
+      | None -> get_address (find_ident_module id env).mda_address
+      end
   | Pident id -> get_address (find_ident_module id env).mda_address
   | Pdot(p, s) ->
       let c = find_structure_components p env in
@@ -1096,6 +1115,13 @@ let add_required_global id =
   then required_globals := id :: !required_globals
 
 let rec normalize_module_path lax env = function
+  | Pident id as path when Ident.is_instantiable id ->
+      begin match Ident.instantiation id with
+      | Some path -> normalize_module_path lax env path
+      | None ->
+          (* This module won't be an alias, so we can shortcut here. *)
+          if lax then path else raise Not_found
+      end
   | Pident id as path when lax && Ident.persistent id ->
       path (* fast path (avoids lookup) *)
   | Pdot (p, s) as path ->

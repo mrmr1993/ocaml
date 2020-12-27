@@ -20,6 +20,10 @@ type t = Ident.path =
   | Pdot of t * string
   | Papply of t * t
 
+val repr: t -> t
+        (** Resolve [Pident id] where [id] is instantiable and has been
+            instantiated. *)
+
 val same: t -> t -> bool
 val compare: t -> t -> int
 val find_free_opt: Ident.t list -> t -> Ident.t option

@@ -823,7 +823,7 @@ let rec expression : Typedtree.expression -> term_judg =
     | Texp_functor (id, _name, _pack, e) ->
       remove_id id (expression e) << Delay
     | Texp_functor_apply (e, pth, _li, _mexpr) ->
-      join [expression e; path pth] << Dereference
+      join [expression e; path (Path.repr pth)] << Dereference
 
 and binding_op : Typedtree.binding_op -> term_judg =
   fun bop ->

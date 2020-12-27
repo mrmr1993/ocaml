@@ -26,6 +26,11 @@ type t =
   | Unscoped of { name: string; stamp: int }
       (* the stamp is here only for fast comparison, but the name of
          predefined identifiers is always unique. *)
+  | Instantiable of
+      { name: string
+      ; stamp: int
+      ; mutable scope: int
+      ; mutable path: path option }
 
 and path =
   | Pident of t
@@ -58,17 +63,23 @@ let create_unscoped s =
   incr currentstamp;
   Unscoped { name = s; stamp = !currentstamp }
 
+let create_instantiable ~scope s =
+  incr currentstamp;
+  Instantiable { name = s; stamp = !currentstamp; scope; path = None }
+
 let name = function
   | Local { name; _ }
   | Scoped { name; _ }
   | Global name
   | Predef { name; _ }
-  | Unscoped { name; _ } -> name
+  | Unscoped { name; _ }
+  | Instantiable { name; _ } -> name
 
 let rename = function
   | Local { name; stamp = _ }
   | Scoped { name; stamp = _; scope = _ }
-  | Unscoped { name; stamp = _ } ->
+  | Unscoped { name; stamp = _ }
+  | Instantiable { name; _ } ->
       incr currentstamp;
       Local { name; stamp = !currentstamp }
   | id ->
@@ -77,7 +88,8 @@ let rename = function
 let unique_name = function
   | Local { name; stamp }
   | Scoped { name; stamp }
-  | Unscoped { name; stamp } -> name ^ "_" ^ Int.to_string stamp
+  | Unscoped { name; stamp }
+  | Instantiable { name; stamp; _ } -> name ^ "_" ^ Int.to_string stamp
   | Global name ->
       (* we're adding a fake stamp, because someone could have named his unit
          [Foo_123] and since we're using unique_name to produce symbol names,
@@ -91,7 +103,8 @@ let unique_name = function
 let unique_toplevel_name = function
   | Local { name; stamp }
   | Scoped { name; stamp }
-  | Unscoped { name; stamp } -> name ^ "/" ^ Int.to_string stamp
+  | Unscoped { name; stamp }
+  | Instantiable { name; stamp; _} -> name ^ "/" ^ Int.to_string stamp
   | Global name
   | Predef { name; _ } -> name
 
@@ -104,7 +117,8 @@ let equal i1 i2 =
   | Local { name = name1; _ }, Local { name = name2; _ }
   | Scoped { name = name1; _ }, Scoped { name = name2; _ }
   | Unscoped { name = name1; _ }, Unscoped { name = name2; _ }
-  | Global name1, Global name2 ->
+  | Global name1, Global name2
+  | Instantiable { name = name1; _ }, Instantiable { name = name2; _ } ->
       name1 = name2
   | Predef { stamp = s1; _ }, Predef { stamp = s2 } ->
       (* if they don't have the same stamp, they don't have the same name *)
@@ -117,7 +131,8 @@ let same i1 i2 =
   | Local { stamp = s1; _ }, Local { stamp = s2; _ }
   | Scoped { stamp = s1; _ }, Scoped { stamp = s2; _ }
   | Predef { stamp = s1; _ }, Predef { stamp = s2 }
-  | Unscoped { stamp = s1; _ }, Unscoped { stamp = s2; _ } ->
+  | Unscoped { stamp = s1; _ }, Unscoped { stamp = s2; _ }
+  | Instantiable { stamp = s1; _ }, Instantiable { stamp = s2; _} ->
       s1 = s2
   | Global name1, Global name2 ->
       name1 = name2
@@ -127,11 +142,12 @@ let same i1 i2 =
 let stamp = function
   | Local { stamp; _ }
   | Scoped { stamp; _ }
-  | Unscoped { stamp; _ } -> stamp
+  | Unscoped { stamp; _ }
+  | Instantiable { stamp; _ } -> stamp
   | _ -> 0
 
 let scope = function
-  | Scoped { scope; _ } -> scope
+  | Scoped { scope; _ } | Instantiable { scope; _ } -> scope
   | Local _ -> highest_scope
   | Global _ | Predef _ -> lowest_scope
   | Unscoped _ as i -> raise (No_scope i)
@@ -146,7 +162,8 @@ let reinit () =
 let global = function
   | Local _
   | Scoped _
-  | Unscoped _ -> false
+  | Unscoped _
+  | Instantiable _ -> false
   | Global _
   | Predef _ -> true
 
@@ -158,6 +175,24 @@ let is_unscoped = function
   | Unscoped _ -> true
   | _ -> false
 
+let is_instantiable = function
+  | Instantiable _ -> true
+  | _ -> false
+
+let instantiation = function
+  | Instantiable {path; _} -> path
+  | id -> Misc.fatal_errorf "Ident.instantiation %s" (name id)
+
+let set_instantiation id path =
+  match id with
+  | Instantiable {path= Some _} ->
+      Misc.fatal_errorf "Ident.set_instantiation %s: Already instantiated"
+        (name id)
+  | Instantiable x ->
+      x.path <- Some path
+  | _ -> Misc.fatal_errorf "Ident.set_instantiation %s" (name id)
+
+
 let print ~with_scope ppf =
   let open Format in
   function
@@ -168,7 +203,8 @@ let print ~with_scope ppf =
   | Local { name; stamp = n } ->
       fprintf ppf "%s%s" name
         (if !Clflags.unique_ids then sprintf "/%i" n else "")
-  | Scoped { name; stamp = n; scope } ->
+  | Scoped { name; stamp = n; scope }
+  | Instantiable { name; stamp = n; scope; _ } ->
       fprintf ppf "%s%s%s" name
         (if !Clflags.unique_ids then sprintf "/%i" n else "")
         (if with_scope then sprintf "[%i]" scope else "")
@@ -348,7 +384,8 @@ let make_key_generator () =
   function
   | Local _
   | Scoped _
-  | Unscoped _ ->
+  | Unscoped _
+  | Instantiable _ ->
       let stamp = !c in
       decr c ;
       Local { name = key_name; stamp = stamp }
@@ -379,6 +416,12 @@ let compare x y =
   | Global _, _ -> 1
   | _, Global _ -> (-1)
   | Predef { stamp = s1; _ }, Predef { stamp = s2; _ } -> compare s1 s2
+  | Predef _, _ -> 1
+  | _, Predef _ -> (-1)
+  | Instantiable x, Instantiable y ->
+      let c = x.stamp - y.stamp in
+      if c <> 0 then c
+      else compare x.name y.name
 
 let output oc id = output_string oc (unique_name id)
 let hash i = (Char.code (name i).[0]) lxor (stamp i)

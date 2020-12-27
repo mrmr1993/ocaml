@@ -383,7 +383,7 @@ let rec module_path_is_an_alias_of env path ~alias_of =
 (* Simple heuristic to print Foo__bar.* as Foo.Bar.* when Foo.Bar is an alias
    for Foo__bar. This pattern is used by the stdlib. *)
 let rec rewrite_double_underscore_paths env p =
-  match p with
+  match Path.repr p with
   | Pdot (p, s) ->
     Pdot (rewrite_double_underscore_paths env p, s)
   | Papply (a, b) ->
@@ -416,7 +416,11 @@ let rewrite_double_underscore_paths env p =
 
 let rec tree_of_path namespace = function
   | Pident id ->
-      Oide_ident (ident_name namespace id)
+      if Ident.is_instantiable id then
+        match Ident.instantiation id with
+        | Some path -> tree_of_path namespace path
+        | None -> Oide_ident (ident_name namespace id)
+      else Oide_ident (ident_name namespace id)
   | Pdot(_, s) as path when non_shadowed_pervasive path ->
       Oide_ident (Naming_context.pervasives_name namespace s)
   | Pdot(Pident t, s)
@@ -674,8 +678,9 @@ let penalty s =
     | None -> 1
     | Some _ -> 10
 
-let rec path_size = function
-    Pident id ->
+let rec path_size path =
+  match Path.repr path with
+  | Pident id ->
       penalty (Ident.name id), -Ident.scope id
   | Pdot (p, _) ->
       let (l, b) = path_size p in (1+l, b)
@@ -725,8 +730,9 @@ let wrap_printing_env ~error env f =
   if error then Env.without_cmis (wrap_printing_env env) f
   else wrap_printing_env env f
 
-let rec lid_of_path = function
-    Path.Pident id ->
+let rec lid_of_path path =
+  match Path.repr path with
+  | Path.Pident id ->
       Longident.Lident (Ident.name id)
   | Path.Pdot (p1, s) ->
       Longident.Ldot (lid_of_path p1, s)

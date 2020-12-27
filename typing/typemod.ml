@@ -269,7 +269,7 @@ let make_variance p n i =
   set May_pos p (set May_neg n (set May_weak n (set Inj i null)))
 
 let rec iter_path_apply p ~f =
-  match p with
+  match Path.repr p with
   | Pident _ -> ()
   | Pdot (p, _) -> iter_path_apply p ~f
   | Papply (p1, p2) ->
