@@ -1275,21 +1275,21 @@ let add_implicit_module_instance loc id mty env =
   in
   let implicits =
     match env.implicit_modules with
-    | [] -> fatal_error "Env.add_implicit_module"
+    | [] -> fatal_error "Env.add_implicit_module_instance"
     | (_scope, implicits) :: _ -> implicits
   in
   implicits := Ident.Map.add id (loc, mda) !implicits
 
 let implicit_module_instances env =
   match env.implicit_modules with
-  | [] -> fatal_error "Env.add_implicit_module"
+  | [] -> fatal_error "Env.implicit_module_instances"
   | (_scope, implicits) :: _ ->
       List.map (fun (id, (loc, _)) -> (loc, id))
         (Ident.Map.bindings !implicits)
 
 let implicit_module_scope env =
   match env.implicit_modules with
-  | [] -> fatal_error "Env.add_implicit_module"
+  | [] -> fatal_error "Env.implicit_module_scope"
   | (scope, _implicits) :: _ -> scope
 
 (* Copying types associated with values *)
