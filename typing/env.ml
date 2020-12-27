@@ -406,6 +406,7 @@ type t = {
   summary: summary;
   local_constraints: type_declaration Path.Map.t;
   flags: int;
+  implicit_modules: (int * (Location.t * module_data) Ident.Map.t ref) list;
 }
 
 and module_declaration_lazy =
@@ -594,6 +595,7 @@ let empty = {
   summary = Env_empty; local_constraints = Path.Map.empty;
   flags = 0;
   functor_args = Ident.empty;
+  implicit_modules = [];
  }
 
 let in_signature b env =
@@ -890,7 +892,15 @@ let rec find_module_components path env =
   | Pident id when Ident.is_instantiable id ->
       begin match Ident.instantiation id with
       | Some path -> find_module_components path env
-      | None -> (find_ident_module id env).mda_components
+      | None ->
+          match
+            List.find_map
+              (fun (_scope, implicit_modules) ->
+                Ident.Map.find_opt id !implicit_modules)
+              env.implicit_modules
+          with
+          | Some (_loc, mda) -> mda.mda_components
+          | None -> raise Not_found
       end
   | Pident id -> (find_ident_module id env).mda_components
   | Pdot(p, s) ->
@@ -1243,6 +1253,44 @@ let rec is_functor_arg path env =
       end
   | Pdot (p, _s) -> is_functor_arg p env
   | Papply _ -> true
+
+(* Implicit modules *)
+
+let open_implicit_modules_scope ~scope env =
+  { env with
+    implicit_modules= (scope, ref Ident.Map.empty) :: env.implicit_modules }
+
+let add_implicit_module_instance loc id mty env =
+  let md = md mty in
+  let addr = EnvLazy.create_forced (Aident id) in
+  let module_decl_lazy = EnvLazy.create_forced md in
+  let comps =
+    components_of_module ~alerts:String.Map.empty ~uid:md.md_uid
+      env None Subst.identity (Pident id) addr md.md_type
+  in
+  let mda =
+    { mda_declaration = module_decl_lazy;
+      mda_components = comps;
+      mda_address = addr }
+  in
+  let implicits =
+    match env.implicit_modules with
+    | [] -> fatal_error "Env.add_implicit_module"
+    | (_scope, implicits) :: _ -> implicits
+  in
+  implicits := Ident.Map.add id (loc, mda) !implicits
+
+let implicit_module_instances env =
+  match env.implicit_modules with
+  | [] -> fatal_error "Env.add_implicit_module"
+  | (_scope, implicits) :: _ ->
+      List.map (fun (id, (loc, _)) -> (loc, id))
+        (Ident.Map.bindings !implicits)
+
+let implicit_module_scope env =
+  match env.implicit_modules with
+  | [] -> fatal_error "Env.add_implicit_module"
+  | (scope, _implicits) :: _ -> scope
 
 (* Copying types associated with values *)
 

@@ -2785,10 +2785,16 @@ and type_expect_
             check_partial_application false exp)
       end
   | Pexp_match(sarg, caselist) ->
+      let arg_env =
+        Env.open_implicit_modules_scope ~scope:(Ctype.get_current_level()) env
+      in
       begin_def ();
-      let arg = type_exp env sarg in
+      let arg = type_exp arg_env sarg in
       end_def ();
-      if maybe_expansive arg then lower_contravariant env arg.exp_type;
+      if maybe_expansive arg then lower_contravariant arg_env arg.exp_type;
+      List.iter (fun (loc, _id) ->
+          raise (Error (loc, arg_env, Ambiguous_functor_argument [])))
+        (Env.implicit_module_instances arg_env);
       generalize arg.exp_type;
       let cases, partial =
         type_cases Computation env arg.exp_type ty_expected true loc caselist in
@@ -3798,8 +3804,50 @@ and type_expect_
         exp_attributes = sexp.pexp_attributes;
         exp_env = env }
 
-  | Pexp_functor_apply (_sfunct, ({txt= None; _} as lid)) ->
-      raise (Error (lid.loc, env, Ambiguous_functor_argument []))
+  | Pexp_functor_apply (sfunct, ({txt= None; _} as lid)) ->
+      if !Clflags.principal then begin_def ();
+      let funct = type_exp env sfunct in
+      if !Clflags.principal then begin
+        end_def ();
+        generalize_structure funct.exp_type
+      end;
+      (* This instance generates a new bound identifier that we can erase with
+         a scope escape.
+      *)
+      let funct_ty = instance funct.exp_type in
+      let id, (p, nl, tl), ty_res =
+        match (Ctype.expand_head env funct_ty).desc with
+        | Tfunctor (id, pack, ty) ->
+            id, pack, ty
+        | _ ->
+            raise (Error(loc, env, Cannot_infer_functor_signature funct_ty))
+      in
+      let mty = !Ctype.mty_of_package' env (p, nl, tl) in
+      let name = "?" ^ Ident.name id in
+      let scope = Env.implicit_module_scope env in
+      let ident = Ident.create_instantiable ~scope name in
+      Env.add_implicit_module_instance lid.loc ident mty env;
+      let modl =
+        { mod_desc=
+            Tmod_ident (Pident ident, mkloc (Longident.Lident name) lid.loc)
+        ; mod_loc= lid.loc
+        ; mod_type= mty
+        ; mod_env= env
+        ; mod_attributes= [] }
+      in
+      begin_def ();
+      let subst = Subst.add_module id (Pident ident) Subst.identity in
+      let ty_res = Subst.type_expr subst ty_res in
+      end_def ();
+      check_scope_escape loc env (Ctype.get_current_level ()) ty_res;
+      generalize ty_res;
+      unify_var env (newvar()) ty_res;
+      rue {
+        exp_desc = Texp_functor_apply(funct, Pident ident, lid, modl);
+        exp_loc = loc; exp_extra = [];
+        exp_type = ty_res;
+        exp_attributes = sexp.pexp_attributes;
+        exp_env = env }
 
   | Pexp_extension ({ txt = ("ocaml.extension_constructor"
                              |"extension_constructor"); _ },
@@ -5093,6 +5141,11 @@ and type_let
     List.map2
       (fun {pvb_expr=sexp; pvb_attributes; _} (pat, slot) ->
         if is_recursive then current_slot := slot;
+        (* Open a new implicit scope for each binding. *)
+        let exp_env =
+          Env.open_implicit_modules_scope ~scope:(Ctype.get_current_level())
+            exp_env
+        in
         match pat.pat_type.desc with
         | Tpoly (ty, tl) ->
             if !Clflags.principal then begin_def ();
@@ -5109,6 +5162,9 @@ and type_let
                   type_expect exp_env sexp (mk_expected ty')
               )
             in
+            List.iter (fun (loc, _id) ->
+                raise (Error (loc, exp_env, Ambiguous_functor_argument [])))
+              (Env.implicit_module_instances exp_env);
             exp, Some vars
         | _ ->
             let exp =
@@ -5118,6 +5174,9 @@ and type_let
                   else
                     type_expect exp_env sexp (mk_expected pat.pat_type))
             in
+            List.iter (fun (loc, _id) ->
+                raise (Error (loc, exp_env, Ambiguous_functor_argument [])))
+              (Env.implicit_module_instances exp_env);
             exp, None)
       spat_sexp_list pat_slot_list in
   current_slot := None;
@@ -5256,10 +5315,16 @@ let type_let existential_ctx env rec_flag spat_sexp_list =
 
 let type_expression env sexp =
   Typetexp.reset_type_variables();
+  let env =
+    Env.open_implicit_modules_scope ~scope:(Ctype.get_current_level()) env
+  in
   begin_def();
   let exp = type_exp env sexp in
   end_def();
   if maybe_expansive exp then lower_contravariant env exp.exp_type;
+  List.iter (fun (loc, _id) ->
+      raise (Error (loc, env, Ambiguous_functor_argument [])))
+    (Env.implicit_module_instances env);
   generalize exp.exp_type;
   match sexp.pexp_desc with
     Pexp_ident lid ->
