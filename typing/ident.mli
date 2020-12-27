@@ -76,6 +76,10 @@ val set_instantiation: t -> path -> unit
             @raise [Fatal_error] if called on a non-instantiable ident, or if
             the instantiable ident has already been instantiated. *)
 
+val set_instantiation_scope: t -> int -> unit
+        (** Set the scope of an instantiable ident.
+            @raise [Fatal_error] if called on a non-instantiable ident. *)
+
 val scope: t -> int
         (** @raise [No_scope] if called on an unscoped identifier. *)
 

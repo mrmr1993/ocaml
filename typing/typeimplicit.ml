@@ -46,6 +46,7 @@ let resolve_implicits env =
       match candidates with
       | [(path, modl)] ->
           Ident.set_instantiation id path;
+          Ident.set_instantiation_scope id (Path.scope path);
           (id, loc, modl)
       | _ ->
           let candidates = List.map fst candidates in
