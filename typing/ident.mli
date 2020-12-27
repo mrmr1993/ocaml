@@ -17,6 +17,11 @@
 
 type t
 
+and path =
+  | Pident of t
+  | Pdot of path * string
+  | Papply of path * path
+
 include Identifiable.S with type t := t
 (* Notes:
    - [equal] compares identifiers by name

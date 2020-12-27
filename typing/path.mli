@@ -15,7 +15,7 @@
 
 (* Access paths *)
 
-type t =
+type t = Ident.path =
     Pident of Ident.t
   | Pdot of t * string
   | Papply of t * t

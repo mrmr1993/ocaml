@@ -27,6 +27,11 @@ type t =
       (* the stamp is here only for fast comparison, but the name of
          predefined identifiers is always unique. *)
 
+and path =
+  | Pident of t
+  | Pdot of path * string
+  | Papply of path * path
+
 exception No_scope of t
 
 (* A stamp of 0 denotes a persistent identifier *)
