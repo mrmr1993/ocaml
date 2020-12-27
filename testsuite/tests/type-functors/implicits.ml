@@ -154,3 +154,13 @@ Error: Signature mismatch:
        The value `return' is required but not provided
        The type `t' is required but not provided
 |}]
+
+let type_mismatch = (return_several {_} : bool);;
+
+[%%expect{|
+Line 1, characters 21-39:
+1 | let type_mismatch = (return_several {_} : bool);;
+                         ^^^^^^^^^^^^^^^^^^
+Error: This expression has type int ?M.t * unit ?M.t * int list ?M.t
+       but an expression was expected of type bool
+|}]
