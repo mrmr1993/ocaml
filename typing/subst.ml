@@ -81,6 +81,11 @@ let rec module_path s path =
   try Path.Map.find path s.modules
   with Not_found ->
     match path with
+    | Pident id when Ident.is_instantiable id ->
+        begin match Ident.instantiation id with
+        | Some path -> module_path s path
+        | None -> path
+        end
     | Pident _ -> path
     | Pdot(p, n) ->
        Pdot(module_path s p, n)

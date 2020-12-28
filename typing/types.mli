@@ -572,6 +572,11 @@ and constructor_tag =
   | Cstr_extension of Path.t * bool     (* Extension constructor
                                            true if a constant false if a block*)
 
+type implicit_hole =
+  { ihl_ident: Ident.t
+  ; ihl_loc: Location.t
+  ; ihl_module_type: module_type }
+
 (* Constructors are the same *)
 val equal_tag :  constructor_tag -> constructor_tag -> bool
 

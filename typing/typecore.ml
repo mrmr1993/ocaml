@@ -2571,6 +2571,24 @@ let unify_exp env exp expected_ty =
   with Error(loc, env, Expr_type_clash(trace, tfc, None)) ->
     raise (Error(loc, env, Expr_type_clash(trace, tfc, Some exp.exp_desc)))
 
+let add_resolved_implicits_bindings ~outer_env env exp =
+  (* Wrap with letmodule bindings for each instantiated implicit. *)
+  List.fold_left
+    (fun exp (id, loc, modl) ->
+      let pres =
+        match modl.mod_type with
+        | Mty_alias _ -> Mp_absent
+        | _ -> Mp_present
+      in
+      re {
+        exp_desc = Texp_letmodule(Some id, mkloc None loc, pres, modl, exp);
+        exp_loc = loc;
+        exp_extra = []; (* TODO: signal that we can erase while untyping. *)
+        exp_type = exp.exp_type;
+        exp_attributes = [];
+        exp_env = outer_env } )
+    exp (Typeimplicit.resolve_implicits env)
+
 let rec type_exp ?recarg env sexp =
   (* We now delegate everything to type_expect *)
   type_expect ?recarg env sexp (mk_expected (newvar ()))
@@ -2784,10 +2802,14 @@ and type_expect_
             check_partial_application false exp)
       end
   | Pexp_match(sarg, caselist) ->
+      let arg_env =
+        Env.open_implicit_hole_scope ~scope:(Ctype.get_current_level()) env
+      in
       begin_def ();
-      let arg = type_exp env sarg in
+      let arg = type_exp arg_env sarg in
       end_def ();
-      if maybe_expansive arg then lower_contravariant env arg.exp_type;
+      if maybe_expansive arg then lower_contravariant arg_env arg.exp_type;
+      let arg = add_resolved_implicits_bindings ~outer_env:env arg_env arg in
       generalize arg.exp_type;
       let cases, partial =
         type_cases Computation env arg.exp_type ty_expected true loc caselist in
@@ -3730,7 +3752,14 @@ and type_expect_
         Ident.create_scoped ~scope:(Ctype.get_current_level()) name.txt
       in
       let new_env = Env.add_module scoped_ident Mp_present mty_type env in
+      let new_env = Env.add_implicit_instance (Pident scoped_ident) new_env in
+      let outer_env = new_env in
+      let new_env =
+        Env.open_implicit_hole_scope ~scope:(Ctype.get_current_level())
+          new_env
+      in
       let body = type_expect new_env sbody (mk_expected (newvar ())) in
+      let body = add_resolved_implicits_bindings ~outer_env new_env body in
       end_def();
       let ident = Ident.create_unscoped name.txt in
       (* Substitute [scoped_ident] for [ident]. *)
@@ -3749,7 +3778,8 @@ and type_expect_
         exp_attributes = sexp.pexp_attributes;
         exp_env = env }
 
-  | Pexp_functor_apply (sfunct, lid) ->
+  | Pexp_functor_apply (sfunct, ({txt= Some lid_; _} as lid)) ->
+      let lid_ = mkloc lid_ lid.loc in
       if !Clflags.principal then begin_def ();
       let funct = type_exp env sfunct in
       if !Clflags.principal then begin
@@ -3769,7 +3799,7 @@ and type_expect_
       in
       let (modl, tl') =
         let m =
-          { pmod_desc= Pmod_ident lid
+          { pmod_desc= Pmod_ident lid_
           ; pmod_loc= loc
           ; pmod_attributes= []
         } in
@@ -3780,7 +3810,7 @@ and type_expect_
         raise(Error(loc, env, Expr_type_clash(trace, None, None)))
       end;
       let path =
-        Env.lookup_module_path ~use:true ~loc ~load:true lid.txt env
+        Env.lookup_module_path ~use:true ~loc ~load:true lid_.txt env
       in
       begin_def ();
       let subst = Subst.add_module id path Subst.identity in
@@ -3791,6 +3821,53 @@ and type_expect_
       unify_var env (newvar()) ty_res;
       rue {
         exp_desc = Texp_functor_apply(funct, path, lid, modl);
+        exp_loc = loc; exp_extra = [];
+        exp_type = ty_res;
+        exp_attributes = sexp.pexp_attributes;
+        exp_env = env }
+
+  | Pexp_functor_apply (sfunct, ({txt= None; _} as lid)) ->
+      if !Clflags.principal then begin_def ();
+      let funct = type_exp env sfunct in
+      if !Clflags.principal then begin
+        end_def ();
+        generalize_structure funct.exp_type
+      end;
+      (* This instance generates a new bound identifier that we can erase with
+         a scope escape.
+      *)
+      let funct_ty = instance funct.exp_type in
+      let id, (p, nl, tl), ty_res =
+        match (Ctype.expand_head env funct_ty).desc with
+        | Tfunctor (id, pack, ty) ->
+            id, pack, ty
+        | _ ->
+            raise (Error(loc, env, Cannot_infer_functor_signature funct_ty))
+      in
+      let mty = !Ctype.mty_of_package' env (p, nl, tl) in
+      let name = "?" ^ Ident.name id in
+      let scope = Env.implicit_hole_scope env in
+      let ident = Ident.create_instantiable ~scope name in
+      Env.add_implicit_hole
+        {ihl_loc=lid.loc; ihl_ident=ident; ihl_module_type= mty}
+        env;
+      let modl =
+        { mod_desc=
+            Tmod_ident (Pident ident, mkloc (Longident.Lident name) lid.loc)
+        ; mod_loc= lid.loc
+        ; mod_type= mty
+        ; mod_env= env
+        ; mod_attributes= [] }
+      in
+      begin_def ();
+      let subst = Subst.add_module id (Pident ident) Subst.identity in
+      let ty_res = Subst.type_expr subst ty_res in
+      end_def ();
+      check_scope_escape loc env (Ctype.get_current_level ()) ty_res;
+      generalize ty_res;
+      unify_var env (newvar()) ty_res;
+      rue {
+        exp_desc = Texp_functor_apply(funct, Pident ident, lid, modl);
         exp_loc = loc; exp_extra = [];
         exp_type = ty_res;
         exp_attributes = sexp.pexp_attributes;
@@ -5088,6 +5165,12 @@ and type_let
     List.map2
       (fun {pvb_expr=sexp; pvb_attributes; _} (pat, slot) ->
         if is_recursive then current_slot := slot;
+        let outer_env = exp_env in
+        (* Open a new implicit scope for each binding. *)
+        let exp_env =
+          Env.open_implicit_hole_scope ~scope:(Ctype.get_current_level())
+            exp_env
+        in
         match pat.pat_type.desc with
         | Tpoly (ty, tl) ->
             if !Clflags.principal then begin_def ();
@@ -5104,6 +5187,9 @@ and type_let
                   type_expect exp_env sexp (mk_expected ty')
               )
             in
+            let exp =
+              add_resolved_implicits_bindings ~outer_env exp_env exp
+            in
             exp, Some vars
         | _ ->
             let exp =
@@ -5112,6 +5198,9 @@ and type_let
                     type_unpacks exp_env unpacks sexp (mk_expected pat.pat_type)
                   else
                     type_expect exp_env sexp (mk_expected pat.pat_type))
+            in
+            let exp =
+              add_resolved_implicits_bindings ~outer_env exp_env exp
             in
             exp, None)
       spat_sexp_list pat_slot_list in
@@ -5251,10 +5340,14 @@ let type_let existential_ctx env rec_flag spat_sexp_list =
 
 let type_expression env sexp =
   Typetexp.reset_type_variables();
+  let exp_env =
+    Env.open_implicit_hole_scope ~scope:(Ctype.get_current_level()) env
+  in
   begin_def();
-  let exp = type_exp env sexp in
+  let exp = type_exp exp_env sexp in
   end_def();
-  if maybe_expansive exp then lower_contravariant env exp.exp_type;
+  if maybe_expansive exp then lower_contravariant exp_env exp.exp_type;
+  let exp = add_resolved_implicits_bindings ~outer_env:env exp_env exp in
   generalize exp.exp_type;
   match sexp.pexp_desc with
     Pexp_ident lid ->

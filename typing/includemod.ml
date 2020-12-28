@@ -556,7 +556,7 @@ and check_modtype_equiv ~loc env ~mark cxt mty1 mty2 =
 
 let can_alias env path =
   let rec no_apply = function
-    | Path.Pident _ -> true
+    | Path.Pident id -> not (Ident.is_instantiable id)
     | Path.Pdot(p, _) -> no_apply p
     | Path.Papply _ -> false
   in

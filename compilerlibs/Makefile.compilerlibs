@@ -63,8 +63,8 @@ TYPING=typing/ident.cmo typing/path.cmo \
   typing/typedecl_unboxed.cmo typing/typedecl_immediacy.cmo \
   typing/typedecl_separability.cmo \
   typing/typedecl.cmo typing/typeopt.cmo \
-  typing/rec_check.cmo typing/typecore.cmo typing/typeclass.cmo \
-  typing/typemod.cmo
+  typing/rec_check.cmo typing/typeimplicit.cmo typing/typecore.cmo \
+  typing/typeclass.cmo typing/typemod.cmo
 TYPING_CMI=\
   typing/annot.cmi \
   typing/outcometree.cmi

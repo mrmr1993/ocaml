@@ -17,6 +17,11 @@
 
 type t
 
+and path =
+  | Pident of t
+  | Pdot of path * string
+  | Papply of path * path
+
 include Identifiable.S with type t := t
 (* Notes:
    - [equal] compares identifiers by name
@@ -36,6 +41,7 @@ val create_local: string -> t
 val create_persistent: string -> t
 val create_predef: string -> t
 val create_unscoped: string -> t
+val create_instantiable: scope:int -> string -> t
 
 val rename: t -> t
         (** Creates an identifier with the same name as the input, a fresh
@@ -58,6 +64,21 @@ val compare: t -> t -> int
 val global: t -> bool
 val is_predef: t -> bool
 val is_unscoped: t -> bool
+val is_instantiable: t -> bool
+
+val instantiation: t -> path option
+        (** Gets the path that an instantiable ident has been instantiated as,
+            if any.
+            @raise [Fatal_error] if called on a non-instantiable ident. *)
+
+val set_instantiation: t -> path -> unit
+        (** Instantiate an instantiable ident.
+            @raise [Fatal_error] if called on a non-instantiable ident, or if
+            the instantiable ident has already been instantiated. *)
+
+val set_instantiation_scope: t -> int -> unit
+        (** Set the scope of an instantiable ident.
+            @raise [Fatal_error] if called on a non-instantiable ident. *)
 
 val scope: t -> int
         (** @raise [No_scope] if called on an unscoped identifier. *)

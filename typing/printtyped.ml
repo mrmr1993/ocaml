@@ -51,7 +51,7 @@ let fmt_modname f = function
   | Some id -> Ident.print f id
 
 let rec fmt_path_aux f x =
-  match x with
+  match Path.repr x with
   | Path.Pident (s) -> fprintf f "%a" fmt_ident s;
   | Path.Pdot (y, s) -> fprintf f "%a.%s" fmt_path_aux y s;
   | Path.Papply (y, z) ->

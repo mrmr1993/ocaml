@@ -381,11 +381,21 @@ let contains_type env mty =
 (* Remove module aliases from a signature *)
 
 let rec get_prefixes = function
+  | Pident id when Ident.is_instantiable id ->
+      begin match Ident.instantiation id with
+      | Some path -> get_prefixes path
+      | None -> Path.Set.empty
+      end
   | Pident _ -> Path.Set.empty
   | Pdot (p, _)
   | Papply (p, _) -> Path.Set.add p (get_prefixes p)
 
 let rec get_arg_paths = function
+  | Pident id when Ident.is_instantiable id ->
+      begin match Ident.instantiation id with
+      | Some path -> get_arg_paths path
+      | None -> Path.Set.empty
+      end
   | Pident _ -> Path.Set.empty
   | Pdot (p, _) -> get_arg_paths p
   | Papply (p1, p2) ->
@@ -394,6 +404,15 @@ let rec get_arg_paths = function
            (Path.Set.union (get_arg_paths p1) (get_arg_paths p2)))
 
 let rec rollback_path subst p =
+  let p =
+    match p with
+    | Pident id when Ident.is_instantiable id ->
+        begin match Ident.instantiation id with
+        | Some p -> p
+        | None -> p
+        end
+    | _ -> p
+  in
   try Pident (Path.Map.find p subst)
   with Not_found ->
     match p with

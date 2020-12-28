@@ -269,7 +269,7 @@ let make_variance p n i =
   set May_pos p (set May_neg n (set May_weak n (set Inj i null)))
 
 let rec iter_path_apply p ~f =
-  match p with
+  match Path.repr p with
   | Pident _ -> ()
   | Pdot (p, _) -> iter_path_apply p ~f
   | Papply (p1, p2) ->
@@ -2615,6 +2615,8 @@ let () =
   Typecore.type_open_decl := type_open_decl;
   Typecore.type_package := type_package;
   Typeclass.type_open_descr := type_open_descr;
+  Typeimplicit.wrap_constraint :=
+    (fun env me mty -> wrap_constraint env false me mty Tmodtype_implicit);
   type_module_type_of_fwd := type_module_type_of
 
 

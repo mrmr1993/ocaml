@@ -604,7 +604,7 @@ let mk_directive ~loc name arg =
 
 type apply_kinds =
   | Apply_label of (arg_label * expression)
-  | Apply_module of Longident.t Location.loc
+  | Apply_module of Longident.t option Location.loc
 
 let accumulate_apply_kinds e loc labeled_exprs =
   let e, labeled_exprs, _ =
@@ -2494,8 +2494,10 @@ labeled_simple_expr:
 apply_kinds:
     labeled_simple_expr
       { ($endpos, Apply_label $1) }
-  | LBRACE mkrhs(mod_longident) RBRACE
-      { ($endpos, Apply_module $2) }
+  | LBRACE mod_longident RBRACE
+      { ($endpos, Apply_module (mkrhs (Some $2) $loc($2))) }
+  | LBRACE UNDERSCORE RBRACE
+      { ($endpos, Apply_module (mkrhs None $loc($2))) }
 ;
 %inline lident_list:
   xs = mkrhs(LIDENT)+

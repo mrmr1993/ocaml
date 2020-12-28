@@ -406,6 +406,8 @@ type t = {
   summary: summary;
   local_constraints: type_declaration Path.Map.t;
   flags: int;
+  implicit_holes: (int * (implicit_hole * module_data) Ident.Map.t ref) list;
+  implicit_instances: Path.t list
 }
 
 and module_declaration_lazy =
@@ -594,6 +596,8 @@ let empty = {
   summary = Env_empty; local_constraints = Path.Map.empty;
   flags = 0;
   functor_args = Ident.empty;
+  implicit_holes = [];
+  implicit_instances = []
  }
 
 let in_signature b env =
@@ -887,6 +891,19 @@ let find_ident_module id env =
 
 let rec find_module_components path env =
   match path with
+  | Pident id when Ident.is_instantiable id ->
+      begin match Ident.instantiation id with
+      | Some path -> find_module_components path env
+      | None ->
+          match
+            List.find_map
+              (fun (_scope, implicit_holes) ->
+                Ident.Map.find_opt id !implicit_holes)
+              env.implicit_holes
+          with
+          | Some (_implicit_hole, mda) -> mda.mda_components
+          | None -> raise Not_found
+      end
   | Pident id -> (find_ident_module id env).mda_components
   | Pdot(p, s) ->
       let sc = find_structure_components p env in
@@ -919,6 +936,15 @@ let find_module ~alias path env =
       let fc = find_functor_components p1 env in
       if alias then md (fc.fcomp_res)
       else md (modtype_of_functor_appl fc p1 p2)
+
+let find_module ~alias path env =
+  match path with
+  | Pident id when Ident.is_instantiable id ->
+      begin match Ident.instantiation id with
+      | Some path -> find_module ~alias path env
+      | None -> find_module ~alias path env
+      end
+  | _ -> find_module ~alias path env
 
 let find_value_full path env =
   match path with
@@ -1031,6 +1057,11 @@ let find_type_descrs p env =
 
 let rec find_module_address path env =
   match path with
+  | Pident id when Ident.is_instantiable id ->
+      begin match Ident.instantiation id with
+      | Some path -> find_module_address path env
+      | None -> get_address (find_ident_module id env).mda_address
+      end
   | Pident id -> get_address (find_ident_module id env).mda_address
   | Pdot(p, s) ->
       let c = find_structure_components p env in
@@ -1096,6 +1127,13 @@ let add_required_global id =
   then required_globals := id :: !required_globals
 
 let rec normalize_module_path lax env = function
+  | Pident id as path when Ident.is_instantiable id ->
+      begin match Ident.instantiation id with
+      | Some path -> normalize_module_path lax env path
+      | None ->
+          (* This module won't be an alias, so we can shortcut here. *)
+          if lax then path else raise Not_found
+      end
   | Pident id as path when lax && Ident.persistent id ->
       path (* fast path (avoids lookup) *)
   | Pdot (p, s) as path ->
@@ -1217,6 +1255,50 @@ let rec is_functor_arg path env =
       end
   | Pdot (p, _s) -> is_functor_arg p env
   | Papply _ -> true
+
+(* Implicit modules *)
+
+let open_implicit_hole_scope ~scope env =
+  { env with
+    implicit_holes= (scope, ref Ident.Map.empty) :: env.implicit_holes }
+
+let add_implicit_hole implicit_hole env =
+  let md = md implicit_hole.ihl_module_type in
+  let addr = EnvLazy.create_forced (Aident implicit_hole.ihl_ident) in
+  let module_decl_lazy = EnvLazy.create_forced md in
+  let comps =
+    components_of_module ~alerts:String.Map.empty ~uid:md.md_uid
+      env None Subst.identity (Pident implicit_hole.ihl_ident) addr md.md_type
+  in
+  let mda =
+    { mda_declaration = module_decl_lazy;
+      mda_components = comps;
+      mda_address = addr }
+  in
+  let implicits =
+    match env.implicit_holes with
+    | [] -> fatal_error "Env.add_implicit_module_instance"
+    | (_scope, implicits) :: _ -> implicits
+  in
+  implicits :=
+    Ident.Map.add implicit_hole.ihl_ident (implicit_hole, mda) !implicits
+
+let implicit_holes env =
+  match env.implicit_holes with
+  | [] -> fatal_error "Env.implicit_module_instances"
+  | (_scope, implicits) :: _ ->
+      List.map (fun (_id, (implicit_hole, _mda)) -> implicit_hole)
+        (Ident.Map.bindings !implicits)
+
+let implicit_hole_scope env =
+  match env.implicit_holes with
+  | [] -> fatal_error "Env.implicit_module_scope"
+  | (scope, _implicits) :: _ -> scope
+
+let add_implicit_instance path env =
+  {env with implicit_instances= path :: env.implicit_instances}
+
+let implicit_instances env = env.implicit_instances
 
 (* Copying types associated with values *)
 
