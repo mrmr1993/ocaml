@@ -3384,16 +3384,19 @@ and unify3 ?(stub_unify = false) env id_pairs1 id_pairs2 t1 t1' t2 t2' =
             mcomp !env id_pairs1 id_pairs2 t1' t2';
             record_equation t1' t2'
           )
-      | (Tconstr (path1, _, _), Tconstr (path2, _, _))
-        when List.exists Ident.is_instantiable (Path.heads path1) ->
+      | (Tconstr (path, _, _), _)
+        when List.exists Ident.is_instantiable (Path.heads path) ->
           (* Defer checks instead of failing. *)
-          add_deferred_checks add_implicit_deferred_check_1 path1;
-          add_deferred_checks add_implicit_deferred_check_1 path2;
-      | (Tconstr (path1, _, _), Tconstr (path2, _, _))
-        when List.exists Ident.is_instantiable (Path.heads path2) ->
+          add_deferred_checks add_implicit_deferred_check_1 path;
+          begin match d2 with
+          | Tconstr (path, _, _) ->
+              add_deferred_checks add_implicit_deferred_check_1 path
+          | _ -> ()
+          end
+      | (_, Tconstr (path, _, _))
+        when List.exists Ident.is_instantiable (Path.heads path) ->
           (* Defer checks instead of failing. *)
-          add_deferred_checks add_implicit_deferred_check_2 path1;
-          add_deferred_checks add_implicit_deferred_check_2 path2;
+          add_deferred_checks add_implicit_deferred_check_2 path;
           (* [t2]'s head type is more concrete than [t1]'s, switch the link. *)
           set_type_desc t1' d1;
           link_type t2' t1'
