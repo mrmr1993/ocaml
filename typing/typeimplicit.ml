@@ -13,7 +13,8 @@
 open Typedtree
 
 type error =
-  | Ambiguous_functor_argument of Path.t list
+  | Ambiguous_functor_argument of
+      Path.t list * (Types.type_desc * Types.type_expr) list
 
 exception Error of Location.t * Env.t * error
 
@@ -24,6 +25,7 @@ let wrap_constraint:
 let run_implicit_deferred = function
   | Types.Idfr_scope_escape run -> run ()
   | Types.Idfr_update_level run -> run ()
+  | Types.Idfr_unify (_ty1, _ty2, run) -> run ()
 
 let resolve_implicits env =
   let implicit_instances =
@@ -63,26 +65,46 @@ let resolve_implicits env =
           (id, loc, modl)
       | _ ->
           let candidates = List.map fst candidates in
-          raise (Error (loc, env, Ambiguous_functor_argument candidates)) )
+          let equalities =
+            List.filter_map (function
+                | Types.Idfr_unify (ty1, ty2, _run) -> Some (ty1, ty2)
+                | _ -> None)
+              implicit_hole.ihl_deferreds
+          in
+          raise
+            (Error
+              (loc, env, Ambiguous_functor_argument (candidates, equalities))))
     (Env.implicit_holes env)
 
 open Format
 
 let report_error ~loc _env = function
-  | Ambiguous_functor_argument paths ->
+  | Ambiguous_functor_argument (paths, equalities) ->
       Location.error_of_printer ~loc (fun ppf () ->
-        fprintf ppf "This implicit argument is ambiguous.@ ";
+        fprintf ppf "@[<v>This implicit argument is ambiguous.@ ";
         begin match paths with
           | [] ->
             fprintf ppf "No candidate instances were found."
           | _ ->
             fprintf ppf
-              "Could not choose between the candidates:@ @[<hv>%a.@]"
+              "Could not choose between the candidates:@[<hv2>@ %a.@]"
               (pp_print_list ~pp_sep:pp_print_space
                 (fun ppf path -> pp_print_string ppf (Path.name path)))
               paths
         end;
-        fprintf ppf "@ Hint: Consider passing the desired instance directly."
+        begin match equalities with
+          | [] -> ()
+          | _ ->
+            fprintf ppf
+              "@ @[<v2>Considered constraints:@ %a.@]"
+              (pp_print_list ~pp_sep:pp_print_space
+                (fun ppf (ty1, ty2) ->
+                  fprintf ppf "@[<hv>%a@ =@ %a@]"
+                    Printtyp.type_expr (Btype.newgenty ty1)
+                    Printtyp.type_expr ty2 ))
+              equalities
+        end;
+        fprintf ppf "@ Hint: Consider passing the desired instance directly.@]"
       ) ()
 
 let report_error ~loc env err =

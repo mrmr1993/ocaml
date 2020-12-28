@@ -575,6 +575,7 @@ and constructor_tag =
 type implicit_deferred =
     Idfr_scope_escape of (unit -> unit)
   | Idfr_update_level of (unit -> unit)
+  | Idfr_unify of type_desc * type_expr * (unit -> unit)
 
 type implicit_hole =
   { ihl_ident: Ident.t

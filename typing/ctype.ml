@@ -3242,6 +3242,22 @@ and unify3 ?(stub_unify = false) env id_pairs1 id_pairs2 t1 t1' t2 t2' =
     | _ ->
         None
   in
+  let add_implicit_deferred_check ident =
+    Env.add_implicit_deferred_check ident
+      (Idfr_unify
+        ( d1
+        , t2
+        , (fun () ->
+            (* Reset the description to its pre-unification state. *)
+            set_type_desc t1' d1;
+            unify ~stub_unify env id_pairs1 id_pairs2 t1 t2 )))
+      !env
+  in
+  let add_deferred_checks p =
+    List.iter (fun id ->
+      if Ident.is_instantiable id then add_implicit_deferred_check id)
+      (Path.heads p)
+  in
 
   begin match (d1, d2) with (* handle vars and univars specially *)
     (Tunivar _, Tunivar _) ->
@@ -3357,6 +3373,13 @@ and unify3 ?(stub_unify = false) env id_pairs1 id_pairs2 t1 t1' t2 t2' =
             mcomp !env id_pairs1 id_pairs2 t1' t2';
             record_equation t1' t2'
           )
+      | (Tconstr (path1, _, _), Tconstr (path2, _, _))
+        when
+            ( List.exists Ident.is_instantiable (Path.heads path1)
+            || List.exists Ident.is_instantiable (Path.heads path2) ) ->
+          (* Defer checks instead of failing. *)
+          add_deferred_checks path1;
+          add_deferred_checks path2
       | (Tobject (fi1, nm1), Tobject (fi2, _)) ->
           unify_fields env id_pairs1 id_pairs2 fi1 fi2;
           (* Type [t2'] may have been instantiated by [unify_fields] *)
