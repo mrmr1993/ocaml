@@ -406,7 +406,7 @@ type t = {
   summary: summary;
   local_constraints: type_declaration Path.Map.t;
   flags: int;
-  implicit_holes: (int * (Location.t * module_data) Ident.Map.t ref) list;
+  implicit_holes: (int * (implicit_hole * module_data) Ident.Map.t ref) list;
   implicit_instances: Path.t list
 }
 
@@ -901,7 +901,7 @@ let rec find_module_components path env =
                 Ident.Map.find_opt id !implicit_holes)
               env.implicit_holes
           with
-          | Some (_loc, mda) -> mda.mda_components
+          | Some (_implicit_hole, mda) -> mda.mda_components
           | None -> raise Not_found
       end
   | Pident id -> (find_ident_module id env).mda_components
@@ -1262,13 +1262,13 @@ let open_implicit_hole_scope ~scope env =
   { env with
     implicit_holes= (scope, ref Ident.Map.empty) :: env.implicit_holes }
 
-let add_implicit_hole loc id mty env =
-  let md = md mty in
-  let addr = EnvLazy.create_forced (Aident id) in
+let add_implicit_hole implicit_hole env =
+  let md = md implicit_hole.ihl_module_type in
+  let addr = EnvLazy.create_forced (Aident implicit_hole.ihl_ident) in
   let module_decl_lazy = EnvLazy.create_forced md in
   let comps =
     components_of_module ~alerts:String.Map.empty ~uid:md.md_uid
-      env None Subst.identity (Pident id) addr md.md_type
+      env None Subst.identity (Pident implicit_hole.ihl_ident) addr md.md_type
   in
   let mda =
     { mda_declaration = module_decl_lazy;
@@ -1280,16 +1280,14 @@ let add_implicit_hole loc id mty env =
     | [] -> fatal_error "Env.add_implicit_module_instance"
     | (_scope, implicits) :: _ -> implicits
   in
-  implicits := Ident.Map.add id (loc, mda) !implicits
+  implicits :=
+    Ident.Map.add implicit_hole.ihl_ident (implicit_hole, mda) !implicits
 
 let implicit_holes env =
   match env.implicit_holes with
   | [] -> fatal_error "Env.implicit_module_instances"
   | (_scope, implicits) :: _ ->
-      List.map (fun (id, (loc, mda)) ->
-          ( loc
-          , id
-          , (EnvLazy.force subst_modtype_maker mda.mda_declaration).md_type ) )
+      List.map (fun (_id, (implicit_hole, _mda)) -> implicit_hole)
         (Ident.Map.bindings !implicits)
 
 let implicit_hole_scope env =

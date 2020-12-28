@@ -3848,7 +3848,9 @@ and type_expect_
       let name = "?" ^ Ident.name id in
       let scope = Env.implicit_hole_scope env in
       let ident = Ident.create_instantiable ~scope name in
-      Env.add_implicit_hole lid.loc ident mty env;
+      Env.add_implicit_hole
+        {ihl_loc=lid.loc; ihl_ident=ident; ihl_module_type= mty}
+        env;
       let modl =
         { mod_desc=
             Tmod_ident (Pident ident, mkloc (Longident.Lident name) lid.loc)

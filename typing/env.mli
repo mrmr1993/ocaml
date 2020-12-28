@@ -107,9 +107,8 @@ val add_functor_arg: Ident.t -> t -> t
 val is_functor_arg: Path.t -> t -> bool
 
 val open_implicit_hole_scope: scope:int -> t -> t
-val add_implicit_hole:
-    Location.t -> Ident.t -> module_type -> t -> unit
-val implicit_holes: t -> (Location.t * Ident.t * module_type) list
+val add_implicit_hole: implicit_hole -> t -> unit
+val implicit_holes: t -> implicit_hole list
 val implicit_hole_scope: t -> int
 
 val add_implicit_instance: Path.t -> t -> t

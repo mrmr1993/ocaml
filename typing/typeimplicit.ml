@@ -26,7 +26,7 @@ let resolve_implicits env =
     List.map (fun path -> (path, Env.find_module path env))
       (Env.implicit_instances env)
   in
-  List.map (fun (loc, id, mty) ->
+  List.map (fun {Types.ihl_loc= loc; ihl_ident= id; ihl_module_type= mty} ->
       let candidates =
         List.filter_map
           (fun (path, md) ->
