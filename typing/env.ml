@@ -406,7 +406,7 @@ type t = {
   summary: summary;
   local_constraints: type_declaration Path.Map.t;
   flags: int;
-  implicit_modules: (int * (Location.t * module_data) Ident.Map.t ref) list;
+  implicit_holes: (int * (Location.t * module_data) Ident.Map.t ref) list;
   implicit_instances: Path.t list
 }
 
@@ -596,7 +596,7 @@ let empty = {
   summary = Env_empty; local_constraints = Path.Map.empty;
   flags = 0;
   functor_args = Ident.empty;
-  implicit_modules = [];
+  implicit_holes = [];
   implicit_instances = []
  }
 
@@ -897,9 +897,9 @@ let rec find_module_components path env =
       | None ->
           match
             List.find_map
-              (fun (_scope, implicit_modules) ->
-                Ident.Map.find_opt id !implicit_modules)
-              env.implicit_modules
+              (fun (_scope, implicit_holes) ->
+                Ident.Map.find_opt id !implicit_holes)
+              env.implicit_holes
           with
           | Some (_loc, mda) -> mda.mda_components
           | None -> raise Not_found
@@ -1258,11 +1258,11 @@ let rec is_functor_arg path env =
 
 (* Implicit modules *)
 
-let open_implicit_modules_scope ~scope env =
+let open_implicit_hole_scope ~scope env =
   { env with
-    implicit_modules= (scope, ref Ident.Map.empty) :: env.implicit_modules }
+    implicit_holes= (scope, ref Ident.Map.empty) :: env.implicit_holes }
 
-let add_implicit_module_instance loc id mty env =
+let add_implicit_hole loc id mty env =
   let md = md mty in
   let addr = EnvLazy.create_forced (Aident id) in
   let module_decl_lazy = EnvLazy.create_forced md in
@@ -1276,14 +1276,14 @@ let add_implicit_module_instance loc id mty env =
       mda_address = addr }
   in
   let implicits =
-    match env.implicit_modules with
+    match env.implicit_holes with
     | [] -> fatal_error "Env.add_implicit_module_instance"
     | (_scope, implicits) :: _ -> implicits
   in
   implicits := Ident.Map.add id (loc, mda) !implicits
 
-let implicit_module_instances env =
-  match env.implicit_modules with
+let implicit_holes env =
+  match env.implicit_holes with
   | [] -> fatal_error "Env.implicit_module_instances"
   | (_scope, implicits) :: _ ->
       List.map (fun (id, (loc, mda)) ->
@@ -1292,15 +1292,15 @@ let implicit_module_instances env =
           , (EnvLazy.force subst_modtype_maker mda.mda_declaration).md_type ) )
         (Ident.Map.bindings !implicits)
 
-let implicit_module_scope env =
-  match env.implicit_modules with
+let implicit_hole_scope env =
+  match env.implicit_holes with
   | [] -> fatal_error "Env.implicit_module_scope"
   | (scope, _implicits) :: _ -> scope
 
-let add_implicit_module path env =
+let add_implicit_instance path env =
   {env with implicit_instances= path :: env.implicit_instances}
 
-let implicit_modules env = env.implicit_instances
+let implicit_instances env = env.implicit_instances
 
 (* Copying types associated with values *)
 

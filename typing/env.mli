@@ -106,14 +106,14 @@ val find_constructor_address: Path.t -> t -> address
 val add_functor_arg: Ident.t -> t -> t
 val is_functor_arg: Path.t -> t -> bool
 
-val open_implicit_modules_scope: scope:int -> t -> t
-val add_implicit_module_instance:
+val open_implicit_hole_scope: scope:int -> t -> t
+val add_implicit_hole:
     Location.t -> Ident.t -> module_type -> t -> unit
-val implicit_module_instances: t -> (Location.t * Ident.t * module_type) list
-val implicit_module_scope: t -> int
+val implicit_holes: t -> (Location.t * Ident.t * module_type) list
+val implicit_hole_scope: t -> int
 
-val add_implicit_module: Path.t -> t -> t
-val implicit_modules: t -> Path.t list
+val add_implicit_instance: Path.t -> t -> t
+val implicit_instances: t -> Path.t list
 
 val normalize_module_path: Location.t option -> t -> Path.t -> Path.t
 (* Normalize the path to a concrete module.

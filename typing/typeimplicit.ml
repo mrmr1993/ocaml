@@ -22,9 +22,9 @@ let wrap_constraint:
   ref (fun _env _me _mty -> assert false)
 
 let resolve_implicits env =
-  let implicit_modules =
+  let implicit_instances =
     List.map (fun path -> (path, Env.find_module path env))
-      (Env.implicit_modules env)
+      (Env.implicit_instances env)
   in
   List.map (fun (loc, id, mty) ->
       let candidates =
@@ -41,7 +41,7 @@ let resolve_implicits env =
               in
               Some (path, !wrap_constraint env mod_expr mty)
             with _ -> None )
-          implicit_modules
+          implicit_instances
       in
       match candidates with
       | [(path, modl)] ->
@@ -51,7 +51,7 @@ let resolve_implicits env =
       | _ ->
           let candidates = List.map fst candidates in
           raise (Error (loc, env, Ambiguous_functor_argument candidates)) )
-    (Env.implicit_module_instances env)
+    (Env.implicit_holes env)
 
 open Format
 

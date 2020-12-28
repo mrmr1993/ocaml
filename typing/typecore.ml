@@ -2803,7 +2803,7 @@ and type_expect_
       end
   | Pexp_match(sarg, caselist) ->
       let arg_env =
-        Env.open_implicit_modules_scope ~scope:(Ctype.get_current_level()) env
+        Env.open_implicit_hole_scope ~scope:(Ctype.get_current_level()) env
       in
       begin_def ();
       let arg = type_exp arg_env sarg in
@@ -3752,10 +3752,10 @@ and type_expect_
         Ident.create_scoped ~scope:(Ctype.get_current_level()) name.txt
       in
       let new_env = Env.add_module scoped_ident Mp_present mty_type env in
-      let new_env = Env.add_implicit_module (Pident scoped_ident) new_env in
+      let new_env = Env.add_implicit_instance (Pident scoped_ident) new_env in
       let outer_env = new_env in
       let new_env =
-        Env.open_implicit_modules_scope ~scope:(Ctype.get_current_level())
+        Env.open_implicit_hole_scope ~scope:(Ctype.get_current_level())
           new_env
       in
       let body = type_expect new_env sbody (mk_expected (newvar ())) in
@@ -3846,9 +3846,9 @@ and type_expect_
       in
       let mty = !Ctype.mty_of_package' env (p, nl, tl) in
       let name = "?" ^ Ident.name id in
-      let scope = Env.implicit_module_scope env in
+      let scope = Env.implicit_hole_scope env in
       let ident = Ident.create_instantiable ~scope name in
-      Env.add_implicit_module_instance lid.loc ident mty env;
+      Env.add_implicit_hole lid.loc ident mty env;
       let modl =
         { mod_desc=
             Tmod_ident (Pident ident, mkloc (Longident.Lident name) lid.loc)
@@ -5166,7 +5166,7 @@ and type_let
         let outer_env = exp_env in
         (* Open a new implicit scope for each binding. *)
         let exp_env =
-          Env.open_implicit_modules_scope ~scope:(Ctype.get_current_level())
+          Env.open_implicit_hole_scope ~scope:(Ctype.get_current_level())
             exp_env
         in
         match pat.pat_type.desc with
@@ -5339,7 +5339,7 @@ let type_let existential_ctx env rec_flag spat_sexp_list =
 let type_expression env sexp =
   Typetexp.reset_type_variables();
   let exp_env =
-    Env.open_implicit_modules_scope ~scope:(Ctype.get_current_level()) env
+    Env.open_implicit_hole_scope ~scope:(Ctype.get_current_level()) env
   in
   begin_def();
   let exp = type_exp exp_env sexp in
