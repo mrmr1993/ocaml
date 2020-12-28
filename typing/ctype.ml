@@ -3242,7 +3242,7 @@ and unify3 ?(stub_unify = false) env id_pairs1 id_pairs2 t1 t1' t2 t2' =
     | _ ->
         None
   in
-  let add_implicit_deferred_check ident =
+  let add_implicit_deferred_check_1 ident =
     Env.add_implicit_deferred_check ident
       (Idfr_unify
         ( d1
@@ -3253,7 +3253,18 @@ and unify3 ?(stub_unify = false) env id_pairs1 id_pairs2 t1 t1' t2 t2' =
             unify ~stub_unify env id_pairs1 id_pairs2 t1 t2 )))
       !env
   in
-  let add_deferred_checks p =
+  let add_implicit_deferred_check_2 ident =
+    Env.add_implicit_deferred_check ident
+      (Idfr_unify
+        ( d2
+        , t1
+        , (fun () ->
+            (* Reset the description to its pre-unification state. *)
+            set_type_desc t2' d2;
+            unify ~stub_unify env id_pairs2 id_pairs1 t2 t1 )))
+      !env
+  in
+  let add_deferred_checks add_implicit_deferred_check p =
     List.iter (fun id ->
       if Ident.is_instantiable id then add_implicit_deferred_check id)
       (Path.heads p)
@@ -3374,12 +3385,18 @@ and unify3 ?(stub_unify = false) env id_pairs1 id_pairs2 t1 t1' t2 t2' =
             record_equation t1' t2'
           )
       | (Tconstr (path1, _, _), Tconstr (path2, _, _))
-        when
-            ( List.exists Ident.is_instantiable (Path.heads path1)
-            || List.exists Ident.is_instantiable (Path.heads path2) ) ->
+        when List.exists Ident.is_instantiable (Path.heads path1) ->
           (* Defer checks instead of failing. *)
-          add_deferred_checks path1;
-          add_deferred_checks path2
+          add_deferred_checks add_implicit_deferred_check_1 path1;
+          add_deferred_checks add_implicit_deferred_check_1 path2;
+      | (Tconstr (path1, _, _), Tconstr (path2, _, _))
+        when List.exists Ident.is_instantiable (Path.heads path2) ->
+          (* Defer checks instead of failing. *)
+          add_deferred_checks add_implicit_deferred_check_2 path1;
+          add_deferred_checks add_implicit_deferred_check_2 path2;
+          (* [t2]'s head type is more concrete than [t1]'s, switch the link. *)
+          set_type_desc t1' d1;
+          link_type t2' t1'
       | (Tobject (fi1, nm1), Tobject (fi2, _)) ->
           unify_fields env id_pairs1 id_pairs2 fi1 fi2;
           (* Type [t2'] may have been instantiated by [unify_fields] *)
