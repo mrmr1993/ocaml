@@ -3849,7 +3849,10 @@ and type_expect_
       let scope = Env.implicit_hole_scope env in
       let ident = Ident.create_instantiable ~scope name in
       Env.add_implicit_hole
-        {ihl_loc=lid.loc; ihl_ident=ident; ihl_module_type= mty}
+        { ihl_loc=lid.loc
+        ; ihl_ident=ident
+        ; ihl_module_type= mty
+        ; ihl_deferreds= [] }
         env;
       let modl =
         { mod_desc=

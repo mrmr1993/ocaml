@@ -249,6 +249,9 @@ val set_univar: type_expr option ref -> type_expr -> unit
 val set_kind: field_kind option ref -> field_kind -> unit
 val set_commu: commutable ref -> commutable -> unit
         (* Set references, logging the old value *)
+val set_ident_scope: Ident.t -> int -> unit
+val set_ident_instance: Ident.t -> Path.t -> unit
+val log_implicit_deferred: (unit -> unit) -> unit
 
 (**** Forward declarations ****)
 val print_raw: (Format.formatter -> type_expr -> unit) ref

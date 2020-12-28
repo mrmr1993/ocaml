@@ -164,3 +164,50 @@ Line 1, characters 21-39:
 Error: This expression has type int ?M.t * unit ?M.t * int list ?M.t
        but an expression was expected of type bool
 |}]
+
+let level_lower_excludes_candidates {M : Monad} =
+  let x = ref None in
+  fun {N : Monad} ->
+    (* This assignment lowers the level of the implicit argument's [t] below
+       that of N, so it should be excluded as a candidate.
+    *)
+    x := Some (return {_} 15);
+    !x;;
+
+[%%expect{|
+val level_lower_excludes_candidates :
+  {M : Monad} -> {N : Monad} -> int M.t option = <fun>
+|}]
+
+let level_lower_excludes_candidates_fail () =
+  let x = ref None in
+  fun {N : Monad} ->
+    (* This assignment lowers the level of the implicit argument's [t] below
+       that of N, so it should be excluded as a candidate.
+    *)
+    x := Some (return {_} 15);
+    !x;;
+
+[%%expect{|
+Line 7, characters 23-24:
+7 |     x := Some (return {_} 15);
+                           ^
+Error: This implicit argument is ambiguous.
+       No candidate instances were found.
+       Hint: Consider passing the desired instance directly.
+|}]
+
+let level_lower_expands_type () =
+  let x = ref None in
+  fun {N : Option_monad} ->
+    (* This assignment lowers the level of the implicit argument's [t] below
+       that of N, but it should still be accepted as a candidate by expanding
+       ['a t = 'a option].
+    *)
+    x := Some (return {_} 15);
+    !x;;
+
+[%%expect{|
+val level_lower_expands_type :
+  unit -> {N : Option_monad} -> int option option = <fun>
+|}]

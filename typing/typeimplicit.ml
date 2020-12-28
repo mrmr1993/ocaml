@@ -21,15 +21,20 @@ let wrap_constraint:
     (Env.t -> module_expr -> Types.module_type -> module_expr) ref =
   ref (fun _env _me _mty -> assert false)
 
+let run_implicit_deferred = function
+  | Types.Idfr_scope_escape run -> run ()
+  | Types.Idfr_update_level run -> run ()
+
 let resolve_implicits env =
   let implicit_instances =
     List.map (fun path -> (path, Env.find_module path env))
       (Env.implicit_instances env)
   in
-  List.map (fun {Types.ihl_loc= loc; ihl_ident= id; ihl_module_type= mty} ->
+  List.map (fun ({Types.ihl_loc= loc; ihl_ident= id} as implicit_hole) ->
       let candidates =
         List.filter_map
           (fun (path, md) ->
+            let snap = Btype.snapshot () in
             try
               let mod_expr =
                 { mod_desc=
@@ -39,14 +44,22 @@ let resolve_implicits env =
                 ; mod_env= env
                 ; mod_attributes= [] }
               in
-              Some (path, !wrap_constraint env mod_expr mty)
-            with _ -> None )
+              let modl =
+                !wrap_constraint env mod_expr implicit_hole.ihl_module_type
+              in
+              Btype.set_ident_instance id path;
+              Btype.set_ident_scope id (Path.scope path);
+              List.iter run_implicit_deferred implicit_hole.ihl_deferreds;
+              Btype.backtrack snap;
+              Some (path, modl)
+            with _ -> Btype.backtrack snap; None )
           implicit_instances
       in
       match candidates with
       | [(path, modl)] ->
-          Ident.set_instantiation id path;
-          Ident.set_instantiation_scope id (Path.scope path);
+          Btype.set_ident_instance id path;
+          Btype.set_ident_scope id (Path.scope path);
+          List.iter run_implicit_deferred implicit_hole.ihl_deferreds;
           (id, loc, modl)
       | _ ->
           let candidates = List.map fst candidates in

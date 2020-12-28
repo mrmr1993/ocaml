@@ -434,10 +434,15 @@ and constructor_tag =
   | Cstr_extension of Path.t * bool     (* Extension constructor
                                            true if a constant false if a block*)
 
+type implicit_deferred =
+    Idfr_scope_escape of (unit -> unit)
+  | Idfr_update_level of (unit -> unit)
+
 type implicit_hole =
   { ihl_ident: Ident.t
   ; ihl_loc: Location.t
-  ; ihl_module_type: module_type }
+  ; ihl_module_type: module_type
+  ; ihl_deferreds: implicit_deferred list }
 
 let equal_tag t1 t2 =
   match (t1, t2) with

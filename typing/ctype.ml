@@ -850,6 +850,23 @@ let rec normalize_package_path env p =
       | _ -> p
 
 let rec check_scope_escape env id_pairs level ty =
+  let add_implicit_deferred_check ident =
+    Env.add_implicit_deferred_check ident
+      (Idfr_scope_escape (fun () ->
+        let snap = snapshot () in
+        check_scope_escape env id_pairs level ty;
+        backtrack snap ))
+      env
+  in
+  let add_deferred_checks_or_raise p exn =
+    List.iter (fun id ->
+        if level < Ident.scope id then
+          if Ident.is_instantiable id then
+            add_implicit_deferred_check id
+          else
+            raise exn )
+      (Path.heads (Path.subst id_pairs p) )
+  in
   let mark ty =
     (* Mark visited types with [ty.level < lowest_level]. *)
     set_level ty (lowest_level - 1)
@@ -868,7 +885,8 @@ let rec check_scope_escape env id_pairs level ty =
             mark ty;
             check_scope_escape env id_pairs level ty'
         | exception Cannot_expand ->
-            raise Trace.(Unify [escape (Constructor p)])
+            add_deferred_checks_or_raise p
+              Trace.(Unify [escape (Constructor p)])
         end
     | Tpackage (p, nl, tl) when level < Path.scope_subst id_pairs p ->
         let p' =
@@ -876,7 +894,9 @@ let rec check_scope_escape env id_pairs level ty =
             |> normalize_package_path env
             |> Path.unsubst id_pairs
         in
-        if Path.same p p' then raise Trace.(Unify [escape (Module_type p)]);
+        if Path.same p p' then
+          add_deferred_checks_or_raise p
+            Trace.(Unify [escape (Module_type p)]);
         let orig_level = ty.level in
         mark ty;
         check_scope_escape env id_pairs level
@@ -887,7 +907,9 @@ let rec check_scope_escape env id_pairs level ty =
             |> normalize_package_path env
             |> Path.unsubst id_pairs
         in
-        if Path.same p p' then raise Trace.(Unify [escape (Module_type p)]);
+        if Path.same p p' then
+          add_deferred_checks_or_raise p
+            Trace.(Unify [escape (Module_type p)]);
         let orig_level = ty.level in
         mark ty;
         check_scope_escape env id_pairs level
@@ -943,6 +965,29 @@ let path_scope_subst id_pairs p =
 *)
 
 let rec update_level env id_pairs level expand ty =
+  let add_implicit_deferred_check ident =
+    Env.add_implicit_deferred_check ident
+      (Idfr_update_level (fun () ->
+        let snap = snapshot () in
+        (* Try without expanding first. *)
+        try update_level env id_pairs level false ty
+        with Unify _ ->
+          backtrack snap;
+          update_level env id_pairs level false ty ))
+      env
+  in
+  let add_deferred_checks_or_raise p exn =
+    List.iter (fun id ->
+        if level < Ident.scope id then
+          if expand && Ident.is_instantiable id then
+            (* Only add the deferred check if we're not expanding; otherwise,
+               we'll retry with expansion and may be able to make more
+               progress. *)
+            add_implicit_deferred_check id
+          else
+            raise exn )
+      (Path.heads (Path.subst id_pairs p) )
+  in
   let ty = repr ty in
   if ty.level > level then begin
     if level < ty.scope then raise (Trace.scope_escape ty);
@@ -953,7 +998,7 @@ let rec update_level env id_pairs level expand ty =
           link_type ty (!forward_try_expand_once env id_pairs ty);
           update_level env id_pairs level expand ty
         with Cannot_expand ->
-          raise Trace.(Unify [escape(Constructor p)])
+          add_deferred_checks_or_raise p Trace.(Unify [escape(Constructor p)])
         end
     | Tconstr(p, (_ :: _ as tl), _) ->
         let variance =
@@ -979,7 +1024,9 @@ let rec update_level env id_pairs level expand ty =
             |> normalize_package_path env
             |> Path.unsubst id_pairs
         in
-        if Path.same p p' then raise Trace.(Unify [escape (Module_type p)]);
+        if Path.same p p' then
+          add_deferred_checks_or_raise p
+            Trace.(Unify [escape (Module_type p)]);
         set_type_desc ty (Tpackage (p', nl, tl));
         update_level env id_pairs level expand ty
     | Tfunctor (id, (p, nl, tl), t) when level < path_scope_subst id_pairs p ->
@@ -988,7 +1035,9 @@ let rec update_level env id_pairs level expand ty =
             |> normalize_package_path env
             |> Path.unsubst id_pairs
         in
-        if Path.same p p' then raise Trace.(Unify [escape (Module_type p)]);
+        if Path.same p p' then
+          add_deferred_checks_or_raise p
+            Trace.(Unify [escape (Module_type p)]);
         set_type_desc ty (Tfunctor (id, (p', nl, tl), t));
         update_level env id_pairs level expand ty
     | Tfunctor (id, (p, _nl, tl), t) ->

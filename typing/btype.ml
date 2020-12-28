@@ -78,6 +78,9 @@ type change =
   | Ckind of field_kind option ref * field_kind option
   | Ccommu of commutable ref * commutable
   | Cuniv of type_expr option ref * type_expr option
+  | Cident_scope of Ident.t * int
+  | Cident_instance of Ident.t
+  | Cimplicit_deferred of (unit -> unit)
 
 type changes =
     Change of change * changes ref
@@ -740,6 +743,9 @@ let undo_change = function
   | Ckind  (r, v) -> r := v
   | Ccommu (r, v) -> r := v
   | Cuniv  (r, v) -> r := v
+  | Cident_scope (ident, scope) -> Ident.set_instantiation_scope ident scope
+  | Cident_instance ident -> Ident.clear_instantiation ident
+  | Cimplicit_deferred undo -> undo ()
 
 type snapshot = changes ref * int
 let last_snapshot = s_ref 0
@@ -794,6 +800,12 @@ let set_kind rk k =
   log_change (Ckind (rk, !rk)); rk := Some k
 let set_commu rc c =
   log_change (Ccommu (rc, !rc)); rc := c
+let set_ident_scope ident scope =
+  log_change (Cident_scope (ident, Ident.scope ident));
+  Ident.set_instantiation_scope ident scope
+let set_ident_instance ident path =
+  log_change (Cident_instance ident); Ident.set_instantiation ident path
+let log_implicit_deferred undo = log_change (Cimplicit_deferred undo)
 
 let snapshot () =
   let old = !last_snapshot in
