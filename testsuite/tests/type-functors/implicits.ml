@@ -211,3 +211,193 @@ let level_lower_expands_type () =
 val level_lower_expands_type :
   unit -> {N : Option_monad} -> int option option = <fun>
 |}]
+
+let map {M : Monad} = M.map;;
+
+let bind {M : Monad} = M.bind;;
+
+[%%expect{|
+val map : {M : Monad} -> 'a M.t -> f:('a -> 'b) -> 'b M.t = <fun>
+val bind : {M : Monad} -> 'a M.t -> f:('a -> 'b M.t) -> 'b M.t = <fun>
+|}]
+
+let expression_disambiguation {M : Monad} {O : Option_monad} =
+  return {_} 15 = Some 15;;
+
+[%%expect{|
+val expression_disambiguation : {M : Monad} -> {O : Option_monad} -> bool =
+  <fun>
+|}]
+
+let expression_disambiguation_fail {M : Monad} =
+  return {_} 15 = Some 15;;
+
+[%%expect{|
+Line 2, characters 10-11:
+2 |   return {_} 15 = Some 15;;
+              ^
+Error: This implicit argument is ambiguous.
+       No candidate instances were found.
+       Considered constraints:
+         int ?M.t = int option.
+       Hint: Consider passing the desired instance directly.
+|}]
+
+let nested_types {M : Monad} {N : Monad} (x : int M.t N.t M.t) = x;;
+
+[%%expect{|
+val nested_types :
+  {M : Monad} -> {N : Monad} -> int M.t N.t M.t -> int M.t N.t M.t = <fun>
+|}]
+
+let apply_nested_types {M : Monad} = nested_types {_} {_};;
+
+[%%expect{|
+val apply_nested_types : {M : Monad} -> int M.t M.t M.t -> int M.t M.t M.t =
+  <fun>
+|}]
+
+let apply_nested_types_option {O : Option_monad} = nested_types {_} {_};;
+
+[%%expect{|
+val apply_nested_types_option :
+  {O : Option_monad} -> int O.t O.t O.t -> int O.t O.t O.t = <fun>
+|}]
+
+let applied_nested_types_option =
+  apply_nested_types_option {Option_m} (Some (Some (Some 15)));;
+
+[%%expect{|
+val applied_nested_types_option : int Option_m.t Option_m.t Option_m.t =
+  Some (Some (Some 15))
+|}]
+
+let applied_nested_types_option_fail =
+  apply_nested_types_option {Option_m} (Some (Some 15));;
+
+[%%expect{|
+Line 2, characters 51-53:
+2 |   apply_nested_types_option {Option_m} (Some (Some 15));;
+                                                       ^^
+Error: This expression has type int but an expression was expected of type
+         int Option_m.t = int option
+|}]
+
+module type Functor = sig
+  type _ t
+  val map : 'a t -> f:('a -> 'b) -> 'b t
+end
+
+module Free_monad (F : Functor) = struct
+  type 'a t = Pure of 'a | Free of 'a t F.t
+
+  let return x = Pure x
+
+  let rec map t ~f =
+    match t with
+    | Pure x -> Pure (f x)
+    | Free tf -> Free (F.map tf ~f:(map ~f))
+
+  let rec bind t ~f =
+    match t with
+    | Pure x -> f x
+    | Free tf -> Free (F.map tf ~f:(bind ~f))
+end
+
+[%%expect{|
+module type Functor = sig type _ t val map : 'a t -> f:('a -> 'b) -> 'b t end
+module Free_monad :
+  functor (F : Functor) ->
+    sig
+      type 'a t = Pure of 'a | Free of 'a t F.t
+      val return : 'a -> 'a t
+      val map : 'a t -> f:('a -> 'b) -> 'b t
+      val bind : 'a t -> f:('a -> 'b t) -> 'b t
+    end
+|}]
+
+let map2 {F : Functor} x y ~f =
+  let module M = Free_monad(F) in
+  bind {M} x ~f:(fun x -> map {M} y ~f:(f x))
+
+[%%expect{|
+val map2 :
+  {F : Functor} ->
+  'a Free_monad(F).t ->
+  'b Free_monad(F).t -> f:('a -> 'b -> 'c) -> 'c Free_monad(F).t = <fun>
+|}]
+
+module type Functor_list = Functor with type 'a t = 'a list;;
+
+[%%expect{|
+module type Functor_list =
+  sig type 'a t = 'a list val map : 'a t -> f:('a -> 'b) -> 'b t end
+|}]
+
+let pure {F : Functor_list} x =
+  let module M = Free_monad(F) in
+  M.Pure x;;
+
+let free {F : Functor_list} x =
+  let module M = Free_monad(F) in
+  M.Free x;;
+
+[%%expect{|
+val pure : {F : Functor_list} -> 'a -> 'a Free_monad(F).t = <fun>
+val free : {F : Functor_list} -> 'a Free_monad(F).t F.t -> 'a Free_monad(F).t =
+  <fun>
+|}]
+
+let apply_functor_type {F : Functor_list} =
+  map2 {_} ~f:(fun x y -> x + y)
+    (free {_} [pure {_} 1; pure {_} 2; pure {_} 3])
+    (free {_} [pure {_} 5; pure {_} 6; pure {_} 7]);;
+
+[%%expect{|
+val apply_functor_type : {F : Functor_list} -> int Free_monad(F).t = <fun>
+|}]
+
+module List_f = struct
+  type 'a t = 'a list
+  let rec map xs ~f =
+    match xs with
+    | [] -> []
+    | x :: xs -> f x :: map xs ~f
+end
+
+let applied_functor_type = apply_functor_type {List_f};;
+
+[%%expect{|
+module List_f :
+  sig type 'a t = 'a list val map : 'a list -> f:('a -> 'b) -> 'b list end
+val applied_functor_type : int Free_monad(List_f).t =
+  Free_monad(List_f).Free
+   [Free_monad(List_f).Free
+     [Free_monad(List_f).Pure 6; Free_monad(List_f).Pure 7;
+      Free_monad(List_f).Pure 8];
+    Free_monad(List_f).Free
+     [Free_monad(List_f).Pure 7; Free_monad(List_f).Pure 8;
+      Free_monad(List_f).Pure 9];
+    Free_monad(List_f).Free
+     [Free_monad(List_f).Pure 8; Free_monad(List_f).Pure 9;
+      Free_monad(List_f).Pure 10]]
+|}]
+
+let apply_functor_type_fail {F : Functor} =
+  map2 {_} ~f:(fun x y -> x + y)
+    (free {_} [pure {_} 1; pure {_} 2; pure {_} 3])
+    (free {_} [pure {_} 5; pure {_} 6; pure {_} 7]);;
+
+[%%expect{|
+Line 3, characters 11-12:
+3 |     (free {_} [pure {_} 1; pure {_} 2; pure {_} 3])
+               ^
+Error: This implicit argument is ambiguous.
+       No candidate instances were found.
+       Considered constraints:
+         'a Free_monad(?F).t = int Free_monad(F).t
+         int Free_monad(?F/2).t = 'a Free_monad(?F/1).t
+         int Free_monad(?F/3).t = 'a Free_monad(?F/1).t
+         int Free_monad(?F/4).t = 'a Free_monad(?F/1).t.
+       Hint: Consider passing the desired instance directly.
+|}]
