@@ -401,3 +401,75 @@ Error: This implicit argument is ambiguous.
          int Free_monad(?F/4).t = 'a Free_monad(?F/1).t.
        Hint: Consider passing the desired instance directly.
 |}]
+
+module Monad_F_sig (M : Monad) = struct
+  module type S = Monad with type 'a t = 'a M.t
+end;;
+
+let pack {M : Monad} : (module Monad_F_sig(M).S) = (module M);;
+
+[%%expect{|
+module Monad_F_sig :
+  functor (M : Monad) ->
+    sig
+      module type S =
+        sig
+          type 'a t = 'a M.t
+          val return : 'a -> 'a t
+          val map : 'a t -> f:('a -> 'b) -> 'b t
+          val bind : 'a t -> f:('a -> 'b t) -> 'b t
+        end
+    end
+val pack : {M : Monad} -> (module Monad_F_sig(M).S) = <fun>
+|}]
+
+let pack_unpack {M : Monad} () =
+  let module M = (val pack {_}) in
+  M.return 15;;
+
+[%%expect{|
+val pack_unpack : {M : Monad} -> unit -> int M.t = <fun>
+|}]
+
+module Monad_F_option (M : Monad with type 'a t = 'a option) = M;;
+
+[%%expect{|
+module Monad_F_option :
+  functor
+    (M : sig
+           type 'a t = 'a option
+           val return : 'a -> 'a t
+           val map : 'a t -> f:('a -> 'b) -> 'b t
+           val bind : 'a t -> f:('a -> 'b t) -> 'b t
+         end)
+    ->
+    sig
+      type 'a t = 'a option
+      val return : 'a -> 'a t
+      val map : 'a t -> f:('a -> 'b) -> 'b t
+      val bind : 'a t -> f:('a -> 'b t) -> 'b t
+    end
+|}]
+
+let pack_unpack_functor_fail {M : Monad} () =
+  let module M = Monad_F_option(val pack {_}) in
+  M.return 15;;
+
+[%%expect{|
+Line 2, characters 42-43:
+2 |   let module M = Monad_F_option(val pack {_}) in
+                                              ^
+Error: This implicit argument is ambiguous.
+       No candidate instances were found.
+       Considered constraints:
+         'a ?M.t = 'a option.
+       Hint: Consider passing the desired instance directly.
+|}]
+
+let pack_unpack_functor {M : Option_monad} () =
+  let module M = Monad_F_option(val pack {_}) in
+  M.return 15;;
+
+[%%expect{|
+val pack_unpack_functor : {M : Option_monad} -> unit -> int option = <fun>
+|}]
