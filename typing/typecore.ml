@@ -631,7 +631,11 @@ let rec expand_path env p =
       if Path.same p p' then p else expand_path env p'
 
 let compare_type_path env tpath1 tpath2 =
-  Path.same (expand_path env tpath1) (expand_path env tpath2)
+  let tpath1' = expand_path env tpath1 in
+  let tpath2' = expand_path env tpath2 in
+  Path.same tpath1' tpath2'
+  || List.exists Ident.is_instantiable (Path.heads tpath1')
+  || List.exists Ident.is_instantiable (Path.heads tpath2')
 
 (* Records *)
 exception Wrong_name_disambiguation of Env.t * wrong_name

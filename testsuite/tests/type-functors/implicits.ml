@@ -482,3 +482,150 @@ let pack_unpack_functor_disambiguates {M : Monad} {O : Option_monad} () =
 val pack_unpack_functor_disambiguates :
   {M : Monad} -> {O : Option_monad} -> unit -> int option = <fun>
 |}]
+
+module type Variant_type = sig type t = A | B end;;
+
+let ret_variant_type {T : Variant_type} (x : T.t) = x;;
+
+[%%expect{|
+module type Variant_type = sig type t = A | B end
+val ret_variant_type : {T : Variant_type} -> T.t -> T.t = <fun>
+|}]
+
+let unqualified_variant_type {T : Variant_type} () =
+  ret_variant_type {_} A;;
+
+[%%expect{|
+val unqualified_variant_type : {T : Variant_type} -> unit -> T.t = <fun>
+|}]
+
+let qualified_variant_type {T : Variant_type} () =
+  ret_variant_type {_} T.A;;
+
+[%%expect{|
+val qualified_variant_type : {T : Variant_type} -> unit -> T.t = <fun>
+|}]
+
+let ambiguous_variant_type_fail {T1 : Variant_type} {T2 : Variant_type} () =
+  ret_variant_type {_} A;;
+
+[%%expect{|
+Line 2, characters 20-21:
+2 |   ret_variant_type {_} A;;
+                        ^
+Error: This implicit argument is ambiguous.
+       Could not choose between the candidates: T2 T1.
+       Hint: Consider passing the desired instance directly.
+|}]
+
+let qualified_variant_type_disambiguates {T1 : Variant_type}
+    {T2 : Variant_type} () =
+  ret_variant_type {_} T1.A;;
+
+[%%expect{|
+val qualified_variant_type_disambiguates :
+  {T1 : Variant_type} -> {T2 : Variant_type} -> unit -> T1.t = <fun>
+|}]
+
+module Variant_type = struct type t = A | B end;;
+
+[%%expect{|
+module Variant_type : sig type t = A | B end
+|}]
+
+let variant_type_adds_constraint () = ret_variant_type {_} Variant_type.A;;
+
+[%%expect{|
+Line 1, characters 56-57:
+1 | let variant_type_adds_constraint () = ret_variant_type {_} Variant_type.A;;
+                                                            ^
+Error: This implicit argument is ambiguous.
+       No candidate instances were found.
+       Considered constraints:
+         ?T.t = Variant_type.t.
+       Hint: Consider passing the desired instance directly.
+|}, Principal{|
+Line 1, characters 56-57:
+1 | let variant_type_adds_constraint () = ret_variant_type {_} Variant_type.A;;
+                                                            ^
+Error: This implicit argument is ambiguous.
+       No candidate instances were found.
+       Considered constraints:
+         ?T.t = Variant_type.t
+         ?T.t = Variant_type.t.
+       Hint: Consider passing the desired instance directly.
+|}]
+
+module type Record_type = sig type t = {x: int; y: 'a. 'a -> 'a} end;;
+
+let ret_record_type {T : Record_type} (x : T.t) = x;;
+
+[%%expect{|
+module type Record_type = sig type t = { x : int; y : 'a. 'a -> 'a; } end
+val ret_record_type : {T : Record_type} -> T.t -> T.t = <fun>
+|}]
+
+let unqualified_record_type {T : Record_type} () =
+  ret_record_type {_} {x= 15; y= fun x -> x};;
+
+[%%expect{|
+val unqualified_record_type : {T : Record_type} -> unit -> T.t = <fun>
+|}]
+
+let qualified_record_type {T : Record_type} () =
+  ret_record_type {_} {T.x= 15; y= fun x -> x};;
+
+[%%expect{|
+val qualified_record_type : {T : Record_type} -> unit -> T.t = <fun>
+|}]
+
+let ambiguous_record_type_fail {T1 : Record_type} {T2 : Record_type} () =
+  ret_record_type {_} {x= 15; y= fun x -> x};;
+
+[%%expect{|
+Line 2, characters 19-20:
+2 |   ret_record_type {_} {x= 15; y= fun x -> x};;
+                       ^
+Error: This implicit argument is ambiguous.
+       Could not choose between the candidates: T2 T1.
+       Hint: Consider passing the desired instance directly.
+|}]
+
+let qualified_record_type_disambiguates {T1 : Record_type}
+    {T2 : Record_type} () =
+  ret_record_type {_} {T1.x= 15; y= fun x -> x};;
+
+[%%expect{|
+val qualified_record_type_disambiguates :
+  {T1 : Record_type} -> {T2 : Record_type} -> unit -> T1.t = <fun>
+|}]
+
+module Record_type = struct type t = {x: int; y: 'a. 'a -> 'a} end;;
+
+[%%expect{|
+module Record_type : sig type t = { x : int; y : 'a. 'a -> 'a; } end
+|}]
+
+let record_type_adds_constraint () =
+  ret_record_type {_} {Record_type.x= 15; y= fun x -> x};;
+
+[%%expect{|
+Line 2, characters 19-20:
+2 |   ret_record_type {_} {Record_type.x= 15; y= fun x -> x};;
+                       ^
+Error: This implicit argument is ambiguous.
+       No candidate instances were found.
+       Considered constraints:
+         ?T.t = Record_type.t.
+       Hint: Consider passing the desired instance directly.
+|}, Principal{|
+Line 2, characters 19-20:
+2 |   ret_record_type {_} {Record_type.x= 15; y= fun x -> x};;
+                       ^
+Error: This implicit argument is ambiguous.
+       No candidate instances were found.
+       Considered constraints:
+         ?T.t = Record_type.t
+         ?T.t = Record_type.t.
+       Hint: Consider passing the desired instance directly.
+|}]
