@@ -473,3 +473,12 @@ let pack_unpack_functor {M : Option_monad} () =
 [%%expect{|
 val pack_unpack_functor : {M : Option_monad} -> unit -> int option = <fun>
 |}]
+
+let pack_unpack_functor_disambiguates {M : Monad} {O : Option_monad} () =
+  let module M = Monad_F_option(val pack {_}) in
+  M.return 15;;
+
+[%%expect{|
+val pack_unpack_functor_disambiguates :
+  {M : Monad} -> {O : Option_monad} -> unit -> int option = <fun>
+|}]
