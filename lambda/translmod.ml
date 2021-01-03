@@ -261,13 +261,13 @@ let init_shape id modl =
         init_shape_struct (Env.add_type ~check:false id tdecl env) rem
     | Sig_typext (subid, {ext_loc=loc},_,_) :: _ ->
         raise (Initialization_failure (Unsafe {reason=Unsafe_typext;loc;subid}))
-    | Sig_module(id, Mp_present, md, _, _) :: rem ->
+    | Sig_module(id, Mp_present, md, implicit_, _, _) :: rem ->
         init_shape_mod id md.md_loc env md.md_type ::
-        init_shape_struct (Env.add_module_declaration ~check:false
+        init_shape_struct (Env.add_module_declaration ~check:false ~implicit_
                              id Mp_present md env) rem
-    | Sig_module(id, Mp_absent, md, _, _) :: rem ->
+    | Sig_module(id, Mp_absent, md, implicit_, _, _) :: rem ->
         init_shape_struct
-          (Env.add_module_declaration ~check:false
+          (Env.add_module_declaration ~check:false ~implicit_
                              id Mp_absent md env) rem
     | Sig_modtype(id, minfo, _) :: rem ->
         init_shape_struct (Env.add_modtype id minfo env) rem

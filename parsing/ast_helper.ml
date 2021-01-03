@@ -206,7 +206,8 @@ module Exp = struct
   let new_ ?loc ?attrs a = mk ?loc ?attrs (Pexp_new a)
   let setinstvar ?loc ?attrs a b = mk ?loc ?attrs (Pexp_setinstvar (a, b))
   let override ?loc ?attrs a = mk ?loc ?attrs (Pexp_override a)
-  let letmodule ?loc ?attrs a b c= mk ?loc ?attrs (Pexp_letmodule (a, b, c))
+  let letmodule ?loc ?attrs a b c d =
+    mk ?loc ?attrs (Pexp_letmodule (a, b, c, d))
   let letexception ?loc ?attrs a b = mk ?loc ?attrs (Pexp_letexception (a, b))
   let assert_ ?loc ?attrs a = mk ?loc ?attrs (Pexp_assert a)
   let lazy_ ?loc ?attrs a = mk ?loc ?attrs (Pexp_lazy a)
@@ -421,10 +422,11 @@ end
 
 module Md = struct
   let mk ?(loc = !default_loc) ?(attrs = [])
-        ?(docs = empty_docs) ?(text = []) name typ =
+        ?(docs = empty_docs) ?(text = []) ?(implicit_ = Explicit) name typ =
     {
      pmd_name = name;
      pmd_type = typ;
+     pmd_implicit = implicit_;
      pmd_attributes =
        add_text_attrs text (add_docs_attrs docs attrs);
      pmd_loc = loc;
@@ -457,10 +459,11 @@ end
 
 module Mb = struct
   let mk ?(loc = !default_loc) ?(attrs = [])
-        ?(docs = empty_docs) ?(text = []) name expr =
+        ?(docs = empty_docs) ?(text = []) ?(implicit_ = Explicit) name expr =
     {
      pmb_name = name;
      pmb_expr = expr;
+     pmb_implicit = implicit_;
      pmb_attributes =
        add_text_attrs text (add_docs_attrs docs attrs);
      pmb_loc = loc;
@@ -469,10 +472,11 @@ end
 
 module Opn = struct
   let mk ?(loc = !default_loc) ?(attrs = []) ?(docs = empty_docs)
-        ?(override = Fresh) expr =
+        ?(override = Fresh) ?(implicit_ = Explicit) expr =
     {
      popen_expr = expr;
      popen_override = override;
+     popen_implicit = implicit_;
      popen_loc = loc;
      popen_attributes = add_docs_attrs docs attrs;
     }

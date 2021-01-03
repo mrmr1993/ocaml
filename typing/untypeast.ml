@@ -154,14 +154,14 @@ let open_description sub od =
   let loc = sub.location sub od.open_loc in
   let attrs = sub.attributes sub od.open_attributes in
   Opn.mk ~loc ~attrs
-    ~override:od.open_override
+    ~override:od.open_override ~implicit_:od.open_implicit
     (snd od.open_expr)
 
 let open_declaration sub od =
   let loc = sub.location sub od.open_loc in
   let attrs = sub.attributes sub od.open_attributes in
   Opn.mk ~loc ~attrs
-    ~override:od.open_override
+    ~override:od.open_override ~implicit_:od.open_implicit
     (sub.module_expr sub od.open_expr)
 
 let structure_item sub item =
@@ -215,7 +215,7 @@ let value_description sub v =
 let module_binding sub mb =
   let loc = sub.location sub mb.mb_loc in
   let attrs = sub.attributes sub mb.mb_attributes in
-  Mb.mk ~loc ~attrs
+  Mb.mk ~loc ~attrs ~implicit_:mb.mb_implicit
     (map_loc sub mb.mb_name)
     (sub.module_expr sub mb.mb_expr)
 
@@ -474,8 +474,8 @@ let expression sub exp =
         Pexp_override (List.map (fun (_path, lid, exp) ->
               (map_loc sub lid, sub.expr sub exp)
           ) list)
-    | Texp_letmodule (_id, name, _pres, mexpr, exp) ->
-        Pexp_letmodule (name, sub.module_expr sub mexpr,
+    | Texp_letmodule (_id, name, _pres, mexpr, implicit_, exp) ->
+        Pexp_letmodule (name, sub.module_expr sub mexpr, implicit_,
           sub.expr sub exp)
     | Texp_letexception (ext, exp) ->
         Pexp_letexception (sub.extension_constructor sub ext,
@@ -571,7 +571,7 @@ let signature_item sub item =
 let module_declaration sub md =
   let loc = sub.location sub md.md_loc in
   let attrs = sub.attributes sub md.md_attributes in
-  Md.mk ~loc ~attrs
+  Md.mk ~loc ~attrs ~implicit_:md.md_implicit
     (map_loc sub md.md_name)
     (sub.module_type sub md.md_type)
 

@@ -690,6 +690,7 @@ let accumulate_apply_kinds e loc labeled_exprs =
 %token <string> DOTOP         ".+"
 %token <string> LETOP         "let*" (* just an example *)
 %token <string> ANDOP         "and*" (* just an example *)
+%token IMPLICIT               "implicit"
 %token INHERIT                "inherit"
 %token INITIALIZER            "initializer"
 %token <string * char option> INT "42"  (* just an example *)
@@ -1416,6 +1417,8 @@ structure_item:
         { pstr_exception $1 }
     | module_binding
         { $1 }
+    | implicit_module_binding
+        { $1 }
     | rec_module_bindings
         { pstr_recmodule $1 }
     | module_type_declaration
@@ -1443,6 +1446,20 @@ structure_item:
       let loc = make_loc $sloc in
       let attrs = attrs1 @ attrs2 in
       let body = Mb.mk name body ~attrs ~loc ~docs in
+      Pstr_module body, ext }
+;
+
+(* A single module binding. *)
+%inline implicit_module_binding:
+  IMPLICIT MODULE
+  ext = ext attrs1 = attributes
+  name = mkrhs(module_name)
+  body = module_binding_body
+  attrs2 = post_item_attributes
+    { let docs = symbol_docs $sloc in
+      let loc = make_loc $sloc in
+      let attrs = attrs1 @ attrs2 in
+      let body = Mb.mk name body ~attrs ~loc ~docs ~implicit_:Implicit in
       Pstr_module body, ext }
 ;
 
@@ -1542,6 +1559,7 @@ module_type_declaration:
 open_declaration:
   OPEN
   override = override_flag
+  implicit_ = implicit_
   ext = ext
   attrs1 = attributes
   me = module_expr
@@ -1550,7 +1568,7 @@ open_declaration:
     let attrs = attrs1 @ attrs2 in
     let loc = make_loc $sloc in
     let docs = symbol_docs $sloc in
-    Opn.mk me ~override ~attrs ~loc ~docs, ext
+    Opn.mk me ~override ~attrs ~loc ~docs ~implicit_, ext
   }
 ;
 
@@ -1656,7 +1674,11 @@ signature_item:
         { psig_exception $1 }
     | module_declaration
         { let (body, ext) = $1 in (Psig_module body, ext) }
+    | implicit_module_declaration
+        { let (body, ext) = $1 in (Psig_module body, ext) }
     | module_alias
+        { let (body, ext) = $1 in (Psig_module body, ext) }
+    | implicit_module_alias
         { let (body, ext) = $1 in (Psig_module body, ext) }
     | module_subst
         { let (body, ext) = $1 in (Psig_modsubst body, ext) }
@@ -1690,6 +1712,21 @@ signature_item:
   }
 ;
 
+(* A module declaration. *)
+%inline implicit_module_declaration:
+  IMPLICIT MODULE
+  ext = ext attrs1 = attributes
+  name = mkrhs(module_name)
+  body = module_declaration_body
+  attrs2 = post_item_attributes
+  {
+    let attrs = attrs1 @ attrs2 in
+    let loc = make_loc $sloc in
+    let docs = symbol_docs $sloc in
+    Md.mk name body ~attrs ~loc ~docs ~implicit_:Implicit, ext
+  }
+;
+
 (* The body (right-hand side) of a module declaration. *)
 module_declaration_body:
     COLON mty = module_type
@@ -1715,6 +1752,20 @@ module_declaration_body:
     let loc = make_loc $sloc in
     let docs = symbol_docs $sloc in
     Md.mk name body ~attrs ~loc ~docs, ext
+  }
+;
+%inline implicit_module_alias:
+  IMPLICIT MODULE
+  ext = ext attrs1 = attributes
+  name = mkrhs(module_name)
+  EQUAL
+  body = module_expr_alias
+  attrs2 = post_item_attributes
+  {
+    let attrs = attrs1 @ attrs2 in
+    let loc = make_loc $sloc in
+    let docs = symbol_docs $sloc in
+    Md.mk name body ~attrs ~loc ~docs ~implicit_:Implicit, ext
   }
 ;
 %inline module_expr_alias:
@@ -1836,6 +1887,16 @@ formal_class_parameters:
 
 (* -------------------------------------------------------------------------- *)
 
+(* Implicit modules and opens. *)
+
+%inline implicit_:
+    /* Empty */
+      { Explicit }
+  | IMPLICIT
+      { Implicit }
+
+(* -------------------------------------------------------------------------- *)
+
 (* Class expressions. *)
 
 class_expr:
@@ -1845,10 +1906,10 @@ class_expr:
       { wrap_class_attrs ~loc:$sloc $3 $2 }
   | let_bindings(no_ext) IN class_expr
       { class_of_let_bindings ~loc:$sloc $1 $3 }
-  | LET OPEN override_flag attributes mkrhs(mod_longident) IN class_expr
-      { let loc = ($startpos($2), $endpos($5)) in
-        let od = Opn.mk ~override:$3 ~loc:(make_loc loc) $5 in
-        mkclass ~loc:$sloc ~attrs:$4 (Pcl_open(od, $7)) }
+  | LET OPEN override_flag implicit_ attributes mkrhs(mod_longident) IN class_expr
+      { let loc = ($startpos($2), $endpos($6)) in
+        let od = Opn.mk ~override:$3 ~implicit_:$4 ~loc:(make_loc loc) $6 in
+        mkclass ~loc:$sloc ~attrs:$5 (Pcl_open(od, $8)) }
   | class_expr attribute
       { Cl.attr $1 $2 }
   | mkclass(
@@ -2263,13 +2324,15 @@ expr:
 ;
 %inline expr_attrs:
   | LET MODULE ext_attributes mkrhs(module_name) module_binding_body IN seq_expr
-      { Pexp_letmodule($4, $5, $7), $3 }
+      { Pexp_letmodule($4, $5, Explicit, $7), $3 }
+  | LET IMPLICIT MODULE ext_attributes mkrhs(module_name) module_binding_body IN seq_expr
+      { Pexp_letmodule($5, $6, Implicit, $8), $4 }
   | LET EXCEPTION ext_attributes let_exception_declaration IN seq_expr
       { Pexp_letexception($4, $6), $3 }
-  | LET OPEN override_flag ext_attributes module_expr IN seq_expr
-      { let open_loc = make_loc ($startpos($2), $endpos($5)) in
-        let od = Opn.mk $5 ~override:$3 ~loc:open_loc in
-        Pexp_open(od, $7), $4 }
+  | LET OPEN override_flag implicit_ ext_attributes module_expr IN seq_expr
+      { let open_loc = make_loc ($startpos($2), $endpos($6)) in
+        let od = Opn.mk $6 ~override:$3 ~implicit_:$4 ~loc:open_loc in
+        Pexp_open(od, $8), $5 }
   | FUNCTION ext_attributes match_cases
       { Pexp_function $3, $2 }
   | FUN ext_attributes labeled_simple_pattern fun_def

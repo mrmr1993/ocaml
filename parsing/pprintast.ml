@@ -722,8 +722,12 @@ and expression ctxt f x =
           pp f "@[<hov2>%s@ =@ %a@]" s.txt (expression ctxt) e in
         pp f "@[<hov2>{<%a>}@]"
           (list string_x_expression  ~sep:";"  )  l;
-    | Pexp_letmodule (s, me, e) ->
-        pp f "@[<hov2>let@ module@ %s@ =@ %a@ in@ %a@]"
+    | Pexp_letmodule (s, me, implicit_, e) ->
+        pp f "@[<hov2>let@ %amodule@ %s@ =@ %a@ in@ %a@]"
+          (fun f -> function
+              | Implicit -> pp f "implicit@ "
+              | Explicit -> ())
+            implicit_
           (Option.value s.txt ~default:"_")
           (module_expr reset_ctxt) me (expression ctxt) e
     | Pexp_letexception (cd, e) ->
@@ -742,8 +746,13 @@ and expression ctxt f x =
         pp f "@[<hov2>(!poly!@ %a@ : %a)@]"
           (simple_expr ctxt) e (core_type ctxt) ct
     | Pexp_open (o, e) ->
-        pp f "@[<2>let open%s %a in@;%a@]"
-          (override o.popen_override) (module_expr ctxt) o.popen_expr
+        pp f "@[<2>let open%s %a%a in@;%a@]"
+          (override o.popen_override)
+          (fun f -> function
+              | Implicit -> pp f "implicit "
+              | Explicit -> ())
+            o.popen_implicit
+          (module_expr ctxt) o.popen_expr
           (expression ctxt) e
     | Pexp_variant (l,Some eo) ->
         pp f "@[<2>`%s@;%a@]" l (simple_expr ctxt) eo
@@ -1035,8 +1044,13 @@ and class_expr ctxt f x =
           (class_type ctxt) ct
     | Pcl_extension e -> extension ctxt f e
     | Pcl_open (o, e) ->
-        pp f "@[<2>let open%s %a in@;%a@]"
-          (override o.popen_override) longident_loc o.popen_expr
+        pp f "@[<2>let open%s %a%a in@;%a@]"
+          (override o.popen_override)
+          (fun f -> function
+              | Implicit -> pp f "implicit "
+              | Explicit -> ())
+            o.popen_implicit
+          longident_loc o.popen_expr
           (class_expr ctxt) e
 
 and module_type ctxt f x =
@@ -1129,12 +1143,20 @@ and signature_item ctxt f x : unit =
       end
   | Psig_module ({pmd_type={pmty_desc=Pmty_alias alias;
                             pmty_attributes=[]; _};_} as pmd) ->
-      pp f "@[<hov>module@ %s@ =@ %a@]%a"
+      pp f "@[<hov>%amodule@ %s@ =@ %a@]%a"
+        (fun f -> function
+            | Implicit -> pp f "implicit@ "
+            | Explicit -> ())
+          pmd.pmd_implicit
         (Option.value pmd.pmd_name.txt ~default:"_")
         longident_loc alias
         (item_attributes ctxt) pmd.pmd_attributes
   | Psig_module pmd ->
-      pp f "@[<hov>module@ %s@ :@ %a@]%a"
+      pp f "@[<hov>%amodule@ %s@ :@ %a@]%a"
+        (fun f -> function
+            | Implicit -> pp f "implicit@ "
+            | Explicit -> ())
+          pmd.pmd_implicit
         (Option.value pmd.pmd_name.txt ~default:"_")
         (module_type ctxt) pmd.pmd_type
         (item_attributes ctxt) pmd.pmd_attributes
@@ -1354,7 +1376,11 @@ and structure_item ctxt f x =
             module_helper me'
         | me -> me
       in
-      pp f "@[<hov2>module %s%a@]%a"
+      pp f "@[<hov2>%amodule %s%a@]%a"
+        (fun f -> function
+            | Implicit -> pp f "implicit "
+            | Explicit -> ())
+          x.pmb_implicit
         (Option.value x.pmb_name.txt ~default:"_")
         (fun f me ->
            let me = module_helper me in
@@ -1371,8 +1397,12 @@ and structure_item ctxt f x =
         ) x.pmb_expr
         (item_attributes ctxt) x.pmb_attributes
   | Pstr_open od ->
-      pp f "@[<2>open%s@;%a@]%a"
+      pp f "@[<2>open%s%a@;%a@]%a"
         (override od.popen_override)
+        (fun f -> function
+            | Implicit -> pp f "@ implicit"
+            | Explicit -> ())
+          od.popen_implicit
         (module_expr ctxt) od.popen_expr
         (item_attributes ctxt) od.popen_attributes
   | Pstr_modtype {pmtd_name=s; pmtd_type=md; pmtd_attributes=attrs} ->

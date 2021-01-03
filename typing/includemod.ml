@@ -29,6 +29,9 @@ type symptom =
   | Module_types of module_type * module_type
   | Modtype_infos of Ident.t * modtype_declaration * modtype_declaration
   | Modtype_permutation of Types.module_type * Typedtree.module_coercion
+  | Module_implicit of
+      Ident.t * module_type * Asttypes.implicit_flag * Location.t *
+      Ident.t * module_type * Asttypes.implicit_flag * Location.t
   | Interface_mismatch of string * string
   | Class_type_declarations of
       Ident.t * class_type_declaration * class_type_declaration *
@@ -178,7 +181,8 @@ let item_ident_name = function
        else Field_typext(Ident.name id)
      in
      (id, d.ext_loc, kind)
-  | Sig_module(id, _, d, _, _) -> (id, d.md_loc, Field_module(Ident.name id))
+  | Sig_module(id, _, d, _, _, _) ->
+      (id, d.md_loc, Field_module(Ident.name id))
   | Sig_modtype(id, d, _) -> (id, d.mtd_loc, Field_modtype(Ident.name id))
   | Sig_class(id, d, _, _) -> (id, d.cty_loc, Field_class(Ident.name id))
   | Sig_class_type(id, d, _, _) ->
@@ -187,12 +191,12 @@ let item_ident_name = function
 let is_runtime_component = function
   | Sig_value(_,{val_kind = Val_prim _}, _)
   | Sig_type(_,_,_,_)
-  | Sig_module(_,Mp_absent,_,_,_)
+  | Sig_module(_,Mp_absent,_,_,_,_)
   | Sig_modtype(_,_,_)
   | Sig_class_type(_,_,_,_) -> false
   | Sig_value(_,_,_)
   | Sig_typext(_,_,_,_)
-  | Sig_module(_,Mp_present,_,_,_)
+  | Sig_module(_,Mp_present,_,_,_,_)
   | Sig_class(_,_,_,_) -> true
 
 (* Print a coercion *)
@@ -324,12 +328,12 @@ and try_modtypes ~loc env ~mark cxt subst mty1 mty2 =
       let env, subst =
         match param1, param2 with
         | Some p1, Some p2 ->
-            Env.add_module p1 Mp_present arg2' env,
+            Env.add_module ~implicit_:Explicit p1 Mp_present arg2' env,
             Subst.add_module p2 (Path.Pident p1) subst
         | None, Some p2 ->
-            Env.add_module p2 Mp_present arg2' env, subst
+            Env.add_module ~implicit_:Explicit p2 Mp_present arg2' env, subst
         | Some p1, None ->
-            Env.add_module p1 Mp_present arg2' env, subst
+            Env.add_module ~implicit_:Explicit p1 Mp_present arg2' env, subst
         | None, None ->
             env, subst
       in
@@ -367,7 +371,7 @@ and signatures ~loc env ~mark cxt subst sig1 sig2 =
   let (id_pos_list,_) =
     List.fold_left
       (fun (l,pos) -> function
-          Sig_module (id, Mp_present, _, _, _) ->
+          Sig_module (id, Mp_present, _, _, _, _) ->
             ((id,pos,Tcoerce_none)::l , pos+1)
         | item -> (l, if is_runtime_component item then pos+1 else pos))
       ([], 0) sig1 in
@@ -378,7 +382,7 @@ and signatures ~loc env ~mark cxt subst sig1 sig2 =
     | (Sig_value (_, _, Hidden)
       |Sig_type (_, _, _, Hidden)
       |Sig_typext (_, _, _, Hidden)
-      |Sig_module (_, _, _, _, Hidden)
+      |Sig_module (_, _, _, _, _, Hidden)
       |Sig_modtype (_, _, Hidden)
       |Sig_class (_, _, _, Hidden)
       |Sig_class_type (_, _, _, Hidden)
@@ -482,10 +486,19 @@ and signature_components ~loc old_env ~mark env cxt subst paired =
     :: rem ->
       extension_constructors ~loc env ~mark cxt subst id1 ext1 ext2;
       (pos, Tcoerce_none) :: comps_rec rem
-  | (Sig_module(id1, pres1, mty1, _, _),
-     Sig_module(_id2, pres2, mty2, _, _), pos) :: rem -> begin
+  | (Sig_module(id1, pres1, mty1, implicit1, _, _),
+     Sig_module(id2, pres2, mty2, implicit2, _, _), pos) :: rem ->
+    begin
       let cc = module_declarations ~loc env ~mark cxt subst id1 mty1 mty2 in
       let rem = comps_rec rem in
+      begin match implicit1, implicit2 with
+      | Explicit, Implicit ->
+          raise(Error([(cxt, env,
+            Module_implicit
+              ( id1, mty1.md_type, implicit1, mty1.md_loc
+              , id2, mty2.md_type, implicit2, mty2.md_loc ))]))
+      | _ -> ()
+      end;
       match pres1, pres2, mty1.md_type with
       | Mp_present, Mp_present, _ -> (pos, cc) :: rem
       | _, Mp_absent, _ -> rem
@@ -687,7 +700,8 @@ module Illegal_permutation = struct
     | Mty_signature s , [] -> List.rev ctx, s
     | Mty_signature s, Item k :: q ->
         begin match runtime_item k s with
-        | Sig_module (id, _, md,_,_) -> find env (Module id :: ctx) q md.md_type
+        | Sig_module (id, _, md,_,_,_) ->
+            find env (Module id :: ctx) q md.md_type
         | _ -> raise Not_found
         end
     | Mty_functor(Named (_,mt) as arg,_), InArg :: q ->
@@ -827,6 +841,15 @@ let include_err env ppf = function
       !Oprint.out_sig_item (Printtyp.tree_of_modtype_declaration id d2)
   | Modtype_permutation (mty,c) ->
       Illegal_permutation.pp alt_context env ppf (mty,c)
+  | Module_implicit (id1, mty1, implicit1, loc1, id2, mty2, implicit2, loc2) ->
+      fprintf ppf
+       "@[<v>@[<hv 2>Module type declarations do not match:@ \
+        %a@;<1 -2>does not match@ %a@]@ %a@]"
+      !Oprint.out_sig_item
+        (Printtyp.tree_of_module id1 ~ellipsis:true mty1 Trec_not implicit1)
+      !Oprint.out_sig_item
+        (Printtyp.tree_of_module id2 ~ellipsis:true mty2 Trec_not implicit2)
+      show_locs (loc1, loc2)
   | Interface_mismatch(impl_name, intf_name) ->
       fprintf ppf "@[The implementation %s@ does not match the interface %s:"
        impl_name intf_name

@@ -240,7 +240,7 @@ let expr sub {exp_extra; exp_desc; exp_env; _} =
   | Texp_setinstvar (_, _, _, exp) ->sub.expr sub exp
   | Texp_override (_, list) ->
       List.iter (fun (_, _, e) -> sub.expr sub e) list
-  | Texp_letmodule (_, _, _, mexpr, exp) ->
+  | Texp_letmodule (_, _, _, mexpr, _, exp) ->
       sub.module_expr sub mexpr;
       sub.expr sub exp
   | Texp_letexception (cd, exp) ->

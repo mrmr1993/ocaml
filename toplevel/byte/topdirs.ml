@@ -496,7 +496,7 @@ let trim_signature = function
       Mty_signature
         (List.map
            (function
-               Sig_module (id, pres, md, rs, priv) ->
+               Sig_module (id, pres, md, implicit_, rs, priv) ->
                  let attribute =
                    Ast_helper.Attr.mk
                      (Location.mknoloc "...")
@@ -504,7 +504,7 @@ let trim_signature = function
                  in
                  Sig_module (id, pres, {md with md_attributes =
                                           attribute :: md.md_attributes},
-                             rs, priv)
+                             implicit_, rs, priv)
              (*| Sig_modtype (id, Modtype_manifest mty) ->
                  Sig_modtype (id, Modtype_manifest (trim_modtype mty))*)
              | item -> item)
@@ -644,7 +644,7 @@ let () =
          let acc =
            Sig_module (id, Mp_present,
                        {md with md_type = trim_signature md.md_type},
-                       Trec_not, Exported) :: acc in
+                       Implicit, Trec_not, Exported) :: acc in
          match md.md_type with
          | Mty_alias path ->
              let md = Env.find_module path env in

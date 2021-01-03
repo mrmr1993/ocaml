@@ -109,7 +109,9 @@ let resolve_implicits env =
                   candidates
               in
               begin match candidates with
-              | [(path, _modl)] -> instantiate_implicit implicit_hole path
+              | [(path, _modl)] ->
+                  is_finished := false;
+                  instantiate_implicit implicit_hole path
               | [] ->
                   let equalities =
                     List.filter_map (function

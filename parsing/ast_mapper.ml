@@ -437,9 +437,9 @@ module E = struct
     | Pexp_override sel ->
         override ~loc ~attrs
           (List.map (map_tuple (map_loc sub) (sub.expr sub)) sel)
-    | Pexp_letmodule (s, me, e) ->
+    | Pexp_letmodule (s, me, implicit_, e) ->
         letmodule ~loc ~attrs (map_loc sub s) (sub.module_expr sub me)
-          (sub.expr sub e)
+          implicit_ (sub.expr sub e)
     | Pexp_letexception (cd, e) ->
         letexception ~loc ~attrs
           (sub.extension_constructor sub cd)

@@ -32,7 +32,9 @@ type summary =
   | Env_value of summary * Ident.t * value_description
   | Env_type of summary * Ident.t * type_declaration
   | Env_extension of summary * Ident.t * extension_constructor
-  | Env_module of summary * Ident.t * module_presence * module_declaration
+  | Env_module of
+      summary * Ident.t * module_presence * module_declaration *
+      Asttypes.implicit_flag
   | Env_modtype of summary * Ident.t * modtype_declaration
   | Env_class of summary * Ident.t * class_declaration
   | Env_cltype of summary * Ident.t * class_type_declaration
@@ -112,7 +114,7 @@ val add_implicit_deferred_check: Ident.t -> implicit_deferred -> t -> unit
 val implicit_holes: t -> implicit_hole list
 val implicit_hole_scope: t -> int
 
-val add_implicit_instance: Path.t -> t -> t
+val add_implicit_instance: Ident.t -> t -> t
 val implicit_instances: t -> Path.t list
 
 val normalize_module_path: Location.t option -> t -> Path.t -> Path.t
@@ -277,8 +279,10 @@ val add_type: check:bool -> Ident.t -> type_declaration -> t -> t
 val add_extension:
   check:bool -> rebind:bool -> Ident.t -> extension_constructor -> t -> t
 val add_module:
-  ?arg:bool -> Ident.t -> module_presence -> module_type -> t -> t
-val add_module_declaration: ?arg:bool -> check:bool -> Ident.t ->
+  ?arg:bool -> implicit_:Asttypes.implicit_flag -> Ident.t ->
+  module_presence -> module_type -> t -> t
+val add_module_declaration:
+  ?arg:bool -> check:bool -> implicit_:Asttypes.implicit_flag -> Ident.t ->
   module_presence -> module_declaration -> t -> t
 val add_modtype: Ident.t -> modtype_declaration -> t -> t
 val add_class: Ident.t -> class_declaration -> t -> t
@@ -314,7 +318,7 @@ val add_signature: signature -> t -> t
    not a structure. *)
 val open_signature:
     ?used_slot:bool ref ->
-    ?loc:Location.t -> ?toplevel:bool ->
+    ?loc:Location.t -> ?toplevel:bool -> ?implicit_:bool ->
     Asttypes.override_flag -> Path.t ->
     t -> (t, [`Not_found | `Functor]) result
 
@@ -330,11 +334,11 @@ val enter_extension:
   scope:int -> rebind:bool -> string ->
   extension_constructor -> t -> Ident.t * t
 val enter_module:
-  scope:int -> ?arg:bool -> string -> module_presence ->
-  module_type -> t -> Ident.t * t
+  scope:int -> ?arg:bool -> implicit_:Asttypes.implicit_flag -> string ->
+  module_presence -> module_type -> t -> Ident.t * t
 val enter_module_declaration:
-  scope:int -> ?arg:bool -> string -> module_presence ->
-  module_declaration -> t -> Ident.t * t
+  scope:int -> ?arg:bool -> implicit_:Asttypes.implicit_flag -> string ->
+  module_presence -> module_declaration -> t -> Ident.t * t
 val enter_modtype:
   scope:int -> string -> modtype_declaration -> t -> Ident.t * t
 val enter_class: scope:int -> string -> class_declaration -> t -> Ident.t * t

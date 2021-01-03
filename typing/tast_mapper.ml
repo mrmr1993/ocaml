@@ -340,12 +340,13 @@ let expr sub x =
           path,
           List.map (tuple3 id id (sub.expr sub)) list
         )
-    | Texp_letmodule (id, s, pres, mexpr, exp) ->
+    | Texp_letmodule (id, s, pres, mexpr, implicit_, exp) ->
         Texp_letmodule (
           id,
           s,
           pres,
           sub.module_expr sub mexpr,
+          implicit_,
           sub.expr sub exp
         )
     | Texp_letexception (cd, exp) ->

@@ -424,7 +424,13 @@ let rec tree_of_path namespace = function
   | Pdot(_, s) as path when non_shadowed_pervasive path ->
       Oide_ident (Naming_context.pervasives_name namespace s)
   | Pdot(Pident t, s)
-    when namespace=Type && not (Path.is_uident (Ident.name t)) ->
+    when begin
+      namespace=Type
+      && (
+        let name = Ident.name t in
+        not (Path.is_uident name)
+        && name.[0] <> '?' )
+    end ->
       (* [t.A]: inline record of the constructor [A] from type [t] *)
       Oide_dot (Oide_ident (ident_name Type t), s)
   | Pdot(p, s) ->
@@ -1708,7 +1714,7 @@ let recursive_sigitem = function
   | Sig_class(id,_,rs,_) -> Some(id,rs,3)
   | Sig_class_type (id,_,rs,_) -> Some(id,rs,2)
   | Sig_type(id, _, rs, _)
-  | Sig_module(id, _, _, rs, _) -> Some (id,rs,0)
+  | Sig_module(id, _, _, _, rs, _) -> Some (id,rs,0)
   | _ -> None
 
 let skip k l = snd (Misc.Stdlib.List.split_at k l)
@@ -1748,7 +1754,8 @@ let rec tree_of_modtype ?(ellipsis=false) = function
             | None -> None, fun env -> env
             | Some id ->
                 Some (Ident.name id),
-                Env.add_module ~arg:true id Mp_present ty_arg
+                Env.add_module ~implicit_:Explicit ~arg:true id Mp_present
+                  ty_arg
           in
           Some (name, tree_of_modtype ~ellipsis:false ty_arg),
           wrap_env env (tree_of_modtype ~ellipsis) ty_res
@@ -1781,13 +1788,13 @@ and trees_of_sigitem = function
       [tree_of_type_declaration id decl rs]
   | Sig_typext(id, ext, es, _) ->
       [tree_of_extension_constructor id ext es]
-  | Sig_module(id, _, md, rs, _) ->
+  | Sig_module(id, _, md, implicit_, rs, _) ->
       let ellipsis =
         List.exists (function
           | Parsetree.{attr_name = {txt="..."}; attr_payload = PStr []} -> true
           | _ -> false)
           md.md_attributes in
-      [tree_of_module id md.md_type rs ~ellipsis]
+      [tree_of_module id md.md_type rs ~ellipsis implicit_]
   | Sig_modtype(id, decl, _) ->
       [tree_of_modtype_declaration id decl]
   | Sig_class(id, decl, rs, _) ->
@@ -1803,8 +1810,9 @@ and tree_of_modtype_declaration id decl =
   in
   Osig_modtype (Ident.name id, mty)
 
-and tree_of_module id ?ellipsis mty rs =
-  Osig_module (Ident.name id, tree_of_modtype ?ellipsis mty, tree_of_rec rs)
+and tree_of_module id ?ellipsis mty rs implicit_ =
+  Osig_module
+    (Ident.name id, tree_of_modtype ?ellipsis mty, tree_of_rec rs, implicit_)
 
 let modtype ppf mty = !Oprint.out_module_type ppf (tree_of_modtype mty)
 let modtype_declaration id ppf decl =

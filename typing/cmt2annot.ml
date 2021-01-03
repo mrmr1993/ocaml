@@ -100,7 +100,7 @@ let rec iterator ~scope rebuild_env =
     | Texp_function { cases = f; }
     | Texp_try (_, f) ->
         bind_cases f
-    | Texp_letmodule (_, modname, _, _, body ) ->
+    | Texp_letmodule (_, modname, _, _, _, body ) ->
         Stypes.record (Stypes.An_ident
                          (modname.loc,Option.value ~default:"_" modname.txt,
                           Annot.Idef body.exp_loc))

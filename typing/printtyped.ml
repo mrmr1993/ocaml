@@ -153,6 +153,9 @@ let arg_label i ppf = function
   | Nolabel -> line i ppf "Nolabel\n"
   | Optional s -> line i ppf "Optional \"%s\"\n" s
   | Labelled s -> line i ppf "Labelled \"%s\"\n" s
+let implicit_flag i ppf = function
+  | Explicit -> line i ppf "Explicit\n"
+  | Implicit -> line i ppf "Implicit\n"
 ;;
 
 let record_representation i ppf = let open Types in function
@@ -405,9 +408,10 @@ and expression i ppf x =
   | Texp_override (_, l) ->
       line i ppf "Texp_override\n";
       list i string_x_expression ppf l;
-  | Texp_letmodule (s, _, _, me, e) ->
+  | Texp_letmodule (s, _, _, me, implicit_, e) ->
       line i ppf "Texp_letmodule \"%a\"\n" fmt_modname s;
       module_expr i ppf me;
+      implicit_flag i ppf implicit_;
       expression i ppf e;
   | Texp_letexception (cd, e) ->
       line i ppf "Texp_letexception\n";
@@ -437,6 +441,7 @@ and expression i ppf x =
   | Texp_open (o, e) ->
       line i ppf "Texp_open %a\n"
         fmt_override_flag o.open_override;
+      implicit_flag i ppf o.open_implicit;
       module_expr i ppf o.open_expr;
       attributes i ppf o.open_attributes;
       expression i ppf e;
@@ -632,6 +637,7 @@ and class_expr i ppf x =
       line i ppf "Tcl_open %a %a\n"
         fmt_override_flag o.open_override
         fmt_path (fst o.open_expr);
+      implicit_flag i ppf o.open_implicit;
       class_expr i ppf e
 
 and class_structure i ppf { cstr_self = p; cstr_fields = l } =
@@ -730,6 +736,7 @@ and signature_item i ppf x =
       type_exception i ppf ext
   | Tsig_module md ->
       line i ppf "Tsig_module \"%a\"\n" fmt_modname md.md_id;
+      implicit_flag i ppf md.md_implicit;
       attributes i ppf md.md_attributes;
       module_type i ppf md.md_type
   | Tsig_modsubst ms ->
@@ -763,11 +770,13 @@ and signature_item i ppf x =
 
 and module_declaration i ppf md =
   line i ppf "%a" fmt_modname md.md_id;
+  implicit_flag i ppf md.md_implicit;
   attributes i ppf md.md_attributes;
   module_type (i+1) ppf md.md_type;
 
 and module_binding i ppf x =
   line i ppf "%a\n" fmt_modname x.mb_id;
+  implicit_flag i ppf x.mb_implicit;
   attributes i ppf x.mb_attributes;
   module_expr (i+1) ppf x.mb_expr
 
@@ -853,6 +862,7 @@ and structure_item i ppf x =
   | Tstr_open od ->
       line i ppf "Tstr_open %a\n"
         fmt_override_flag od.open_override;
+      implicit_flag i ppf od.open_implicit;
       module_expr i ppf od.open_expr;
       attributes i ppf od.open_attributes
   | Tstr_class (l) ->

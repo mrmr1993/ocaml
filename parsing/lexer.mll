@@ -57,6 +57,7 @@ let keyword_table =
     "function", FUNCTION;
     "functor", FUNCTOR;
     "if", IF;
+    "implicit", IMPLICIT;
     "in", IN;
     "include", INCLUDE;
     "inherit", INHERIT;

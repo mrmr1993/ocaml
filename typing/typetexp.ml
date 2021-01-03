@@ -558,7 +558,9 @@ and transl_type_aux env policy styp =
       let scoped_ident =
         Ident.create_scoped ~scope:(Ctype.get_current_level()) name.txt
       in
-      let env = Env.add_module scoped_ident Mp_present mty_type env in
+      let env =
+        Env.add_module ~implicit_:Explicit scoped_ident Mp_present mty_type env
+      in
       let cty = transl_type env policy st in
       end_def();
       let ident = Ident.create_unscoped name.txt in

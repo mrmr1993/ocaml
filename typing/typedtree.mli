@@ -258,7 +258,9 @@ and expression_desc =
   | Texp_override of Path.t * (Path.t * string loc * expression) list
   | Texp_letmodule of
       Ident.t option * string option loc * Types.module_presence * module_expr *
-        expression
+        implicit_flag * expression
+        (** let module M = ME in E
+            let implicit module M = ME in E *)
   | Texp_letexception of extension_constructor * expression
   | Texp_assert of expression
   | Texp_lazy of expression
@@ -430,6 +432,7 @@ and module_binding =
      mb_name: string option loc;
      mb_presence: Types.module_presence;
      mb_expr: module_expr;
+     mb_implicit: implicit_flag;
      mb_attributes: attributes;
      mb_loc: Location.t;
     }
@@ -507,6 +510,7 @@ and module_declaration =
      md_name: string option loc;
      md_presence: Types.module_presence;
      md_type: module_type;
+     md_implicit: implicit_flag;
      md_attributes: attributes;
      md_loc: Location.t;
     }
@@ -535,6 +539,7 @@ and 'a open_infos =
      open_expr: 'a;
      open_bound_items: Types.signature;
      open_override: override_flag;
+     open_implicit: implicit_flag;
      open_env: Env.t;
      open_loc: Location.t;
      open_attributes: attribute list;

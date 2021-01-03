@@ -512,7 +512,8 @@ and signature_item =
   | Sig_type of Ident.t * type_declaration * rec_status * visibility
   | Sig_typext of Ident.t * extension_constructor * ext_status * visibility
   | Sig_module of
-      Ident.t * module_presence * module_declaration * rec_status * visibility
+      Ident.t * module_presence * module_declaration * implicit_flag *
+      rec_status * visibility
   | Sig_modtype of Ident.t * modtype_declaration * visibility
   | Sig_class of Ident.t * class_declaration * rec_status * visibility
   | Sig_class_type of Ident.t * class_type_declaration * rec_status * visibility
