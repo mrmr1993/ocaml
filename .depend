@@ -1514,8 +1514,8 @@ typing/typeimplicit.cmo : \
     typing/path.cmi \
     parsing/longident.cmi \
     parsing/location.cmi \
-    typing/ident.cmi \
     typing/env.cmi \
+    typing/btype.cmi \
     typing/typeimplicit.cmi
 typing/typeimplicit.cmx : \
     typing/types.cmx \
@@ -1524,8 +1524,8 @@ typing/typeimplicit.cmx : \
     typing/path.cmx \
     parsing/longident.cmx \
     parsing/location.cmx \
-    typing/ident.cmx \
     typing/env.cmx \
+    typing/btype.cmx \
     typing/typeimplicit.cmi
 typing/typeimplicit.cmi : \
     typing/types.cmi \

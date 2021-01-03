@@ -850,6 +850,23 @@ let rec normalize_package_path env p =
       | _ -> p
 
 let rec check_scope_escape env id_pairs level ty =
+  let add_implicit_deferred_check ident =
+    Env.add_implicit_deferred_check ident
+      (Idfr_scope_escape (fun () ->
+        let snap = snapshot () in
+        check_scope_escape env id_pairs level ty;
+        backtrack snap ))
+      env
+  in
+  let add_deferred_checks_or_raise p exn =
+    List.iter (fun id ->
+        if level < Ident.scope id then
+          if Ident.is_instantiable id then
+            add_implicit_deferred_check id
+          else
+            raise exn )
+      (Path.heads (Path.subst id_pairs p) )
+  in
   let mark ty =
     (* Mark visited types with [ty.level < lowest_level]. *)
     set_level ty (lowest_level - 1)
@@ -868,7 +885,8 @@ let rec check_scope_escape env id_pairs level ty =
             mark ty;
             check_scope_escape env id_pairs level ty'
         | exception Cannot_expand ->
-            raise Trace.(Unify [escape (Constructor p)])
+            add_deferred_checks_or_raise p
+              Trace.(Unify [escape (Constructor p)])
         end
     | Tpackage (p, nl, tl) when level < Path.scope_subst id_pairs p ->
         let p' =
@@ -876,7 +894,9 @@ let rec check_scope_escape env id_pairs level ty =
             |> normalize_package_path env
             |> Path.unsubst id_pairs
         in
-        if Path.same p p' then raise Trace.(Unify [escape (Module_type p)]);
+        if Path.same p p' then
+          add_deferred_checks_or_raise p
+            Trace.(Unify [escape (Module_type p)]);
         let orig_level = ty.level in
         mark ty;
         check_scope_escape env id_pairs level
@@ -887,7 +907,9 @@ let rec check_scope_escape env id_pairs level ty =
             |> normalize_package_path env
             |> Path.unsubst id_pairs
         in
-        if Path.same p p' then raise Trace.(Unify [escape (Module_type p)]);
+        if Path.same p p' then
+          add_deferred_checks_or_raise p
+            Trace.(Unify [escape (Module_type p)]);
         let orig_level = ty.level in
         mark ty;
         check_scope_escape env id_pairs level
@@ -943,6 +965,29 @@ let path_scope_subst id_pairs p =
 *)
 
 let rec update_level env id_pairs level expand ty =
+  let add_implicit_deferred_check ident =
+    Env.add_implicit_deferred_check ident
+      (Idfr_update_level (fun () ->
+        let snap = snapshot () in
+        (* Try without expanding first. *)
+        try update_level env id_pairs level false ty
+        with Unify _ ->
+          backtrack snap;
+          update_level env id_pairs level false ty ))
+      env
+  in
+  let add_deferred_checks_or_raise p exn =
+    List.iter (fun id ->
+        if level < Ident.scope id then
+          if expand && Ident.is_instantiable id then
+            (* Only add the deferred check if we're not expanding; otherwise,
+               we'll retry with expansion and may be able to make more
+               progress. *)
+            add_implicit_deferred_check id
+          else
+            raise exn )
+      (Path.heads (Path.subst id_pairs p) )
+  in
   let ty = repr ty in
   if ty.level > level then begin
     if level < ty.scope then raise (Trace.scope_escape ty);
@@ -953,7 +998,7 @@ let rec update_level env id_pairs level expand ty =
           link_type ty (!forward_try_expand_once env id_pairs ty);
           update_level env id_pairs level expand ty
         with Cannot_expand ->
-          raise Trace.(Unify [escape(Constructor p)])
+          add_deferred_checks_or_raise p Trace.(Unify [escape(Constructor p)])
         end
     | Tconstr(p, (_ :: _ as tl), _) ->
         let variance =
@@ -979,7 +1024,9 @@ let rec update_level env id_pairs level expand ty =
             |> normalize_package_path env
             |> Path.unsubst id_pairs
         in
-        if Path.same p p' then raise Trace.(Unify [escape (Module_type p)]);
+        if Path.same p p' then
+          add_deferred_checks_or_raise p
+            Trace.(Unify [escape (Module_type p)]);
         set_type_desc ty (Tpackage (p', nl, tl));
         update_level env id_pairs level expand ty
     | Tfunctor (id, (p, nl, tl), t) when level < path_scope_subst id_pairs p ->
@@ -988,7 +1035,9 @@ let rec update_level env id_pairs level expand ty =
             |> normalize_package_path env
             |> Path.unsubst id_pairs
         in
-        if Path.same p p' then raise Trace.(Unify [escape (Module_type p)]);
+        if Path.same p p' then
+          add_deferred_checks_or_raise p
+            Trace.(Unify [escape (Module_type p)]);
         set_type_desc ty (Tfunctor (id, (p', nl, tl), t));
         update_level env id_pairs level expand ty
     | Tfunctor (id, (p, _nl, tl), t) ->
@@ -3193,6 +3242,33 @@ and unify3 ?(stub_unify = false) env id_pairs1 id_pairs2 t1 t1' t2 t2' =
     | _ ->
         None
   in
+  let add_implicit_deferred_check_1 ident =
+    Env.add_implicit_deferred_check ident
+      (Idfr_unify
+        ( d1
+        , t2
+        , (fun () ->
+            (* Reset the description to its pre-unification state. *)
+            set_type_desc t1' d1;
+            unify ~stub_unify env id_pairs1 id_pairs2 t1 t2 )))
+      !env
+  in
+  let add_implicit_deferred_check_2 ident =
+    Env.add_implicit_deferred_check ident
+      (Idfr_unify
+        ( d2
+        , t1
+        , (fun () ->
+            (* Reset the description to its pre-unification state. *)
+            set_type_desc t2' d2;
+            unify ~stub_unify env id_pairs2 id_pairs1 t2 t1 )))
+      !env
+  in
+  let add_deferred_checks add_implicit_deferred_check p =
+    List.iter (fun id ->
+      if Ident.is_instantiable id then add_implicit_deferred_check id)
+      (Path.heads p)
+  in
 
   begin match (d1, d2) with (* handle vars and univars specially *)
     (Tunivar _, Tunivar _) ->
@@ -3308,6 +3384,22 @@ and unify3 ?(stub_unify = false) env id_pairs1 id_pairs2 t1 t1' t2 t2' =
             mcomp !env id_pairs1 id_pairs2 t1' t2';
             record_equation t1' t2'
           )
+      | (Tconstr (path, _, _), _)
+        when List.exists Ident.is_instantiable (Path.heads path) ->
+          (* Defer checks instead of failing. *)
+          add_deferred_checks add_implicit_deferred_check_1 path;
+          begin match d2 with
+          | Tconstr (path, _, _) ->
+              add_deferred_checks add_implicit_deferred_check_1 path
+          | _ -> ()
+          end
+      | (_, Tconstr (path, _, _))
+        when List.exists Ident.is_instantiable (Path.heads path) ->
+          (* Defer checks instead of failing. *)
+          add_deferred_checks add_implicit_deferred_check_2 path;
+          (* [t2]'s head type is more concrete than [t1]'s, switch the link. *)
+          set_type_desc t1' d1;
+          link_type t2' t1'
       | (Tobject (fi1, nm1), Tobject (fi2, _)) ->
           unify_fields env id_pairs1 id_pairs2 fi1 fi2;
           (* Type [t2'] may have been instantiated by [unify_fields] *)
@@ -4213,11 +4305,38 @@ let normalize_subst subst =
       !subst
   then subst := List.map (fun (t1,t2) -> repr t1, repr t2) !subst
 
+let eqtype_deferred_checks = ref []
+
 let rec eqtype rename type_pairs subst env id_pairs1 id_pairs2 t1 t2 =
   if t1 == t2 then () else
   let t1 = repr t1 in
   let t2 = repr t2 in
   if t1 == t2 then () else
+  let add_deferred_checks p1 p2 =
+    let deferred_check () =
+      (* Record the value of [subst] so that failed instance resolutions may
+         backtrack to it. *)
+      Btype.log_subst subst !subst;
+      (* Remove the recursion-stopper in [type_pairs] for these types. *)
+      let t1' = expand_head_rigid env id_pairs1 t1 in
+      let t2' = expand_head_rigid env id_pairs2 t2 in
+      let t1' = repr t1' and t2' = repr t2' in
+      TypePairs.remove type_pairs (t1', t2');
+      let snap = Btype.snapshot () in
+      try
+        eqtype rename type_pairs subst env id_pairs1 id_pairs2 t1 t2;
+        backtrack snap;
+      with exn -> backtrack snap; raise exn
+    in
+    let add_check id =
+      if Ident.is_instantiable id then
+        eqtype_deferred_checks :=
+          (id, (Idfr_unify (t1.desc, t2, deferred_check)))
+          :: !eqtype_deferred_checks
+    in
+    List.iter add_check (Path.heads p1);
+    Option.iter (fun p2 -> List.iter add_check (Path.heads p2)) p2
+  in
 
   try
     match (t1.desc, t2.desc) with
@@ -4263,6 +4382,17 @@ let rec eqtype rename type_pairs subst env id_pairs1 id_pairs2 t1 t2 =
                 when Path.same_subst id_pairs1 id_pairs2 p1 p2 ->
               eqtype_list rename type_pairs subst env id_pairs1 id_pairs2 tl1
                 tl2
+          | (Tconstr (path1, _, _), _)
+            when List.exists Ident.is_instantiable (Path.heads path1) ->
+              (* Defer checks instead of failing. *)
+              begin match t2'.desc with
+              | Tconstr (path2, _, _) -> add_deferred_checks path1 (Some path2)
+              | _ -> add_deferred_checks path1 None
+              end
+          | (_, Tconstr (path, _, _))
+            when List.exists Ident.is_instantiable (Path.heads path) ->
+              (* Defer checks instead of failing. *)
+              add_deferred_checks path None;
           | (Tpackage (p1, n1, tl1), Tpackage (p2, n2, tl2)) ->
               begin try
                 unify_package env
@@ -4409,9 +4539,21 @@ and eqtype_row rename type_pairs subst env id_pairs1 id_pairs2 row1 row2 =
 (* Must empty univar_pairs first *)
 let eqtype_list rename type_pairs subst env id_pairs1 id_pairs2 tl1 tl2 =
   univar_pairs := [];
+  eqtype_deferred_checks := [];
   let snap = Btype.snapshot () in
   Misc.try_finally
-    ~always:(fun () -> backtrack snap)
+    ~exceptionally:(fun () -> eqtype_deferred_checks := [])
+    ~always:(fun () ->
+      backtrack snap;
+      (* Add deferred checks here, so that they are not erased by [backtrack]
+         above. We use reverse order to simulate the order they would have been
+         added in if we hadn't have needed this workaround. *)
+      let deferred_checks = List.rev !eqtype_deferred_checks in
+      eqtype_deferred_checks := [];
+      List.iter (fun (ident, check) ->
+          Env.add_implicit_deferred_check ident check env )
+        deferred_checks
+      )
     (fun () ->
       eqtype_list rename type_pairs subst env id_pairs1 id_pairs2 tl1 tl2 )
 

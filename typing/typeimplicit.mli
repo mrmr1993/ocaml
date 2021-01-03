@@ -13,7 +13,8 @@
 open Typedtree
 
 type error =
-  | Ambiguous_functor_argument of Path.t list
+  | Ambiguous_functor_argument of
+      Path.t list * (Types.type_desc * Types.type_expr) list
 
 exception Error of Location.t * Env.t * error
 

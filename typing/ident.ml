@@ -192,6 +192,15 @@ let set_instantiation id path =
       x.path <- Some path
   | _ -> Misc.fatal_errorf "Ident.set_instantiation %s" (name id)
 
+let clear_instantiation id =
+  match id with
+  | Instantiable {path= None} ->
+      Misc.fatal_errorf "Ident.clear_instantiation %s: Not instantiated"
+        (name id)
+  | Instantiable x ->
+      x.path <- None
+  | _ -> Misc.fatal_errorf "Ident.clear_instantiation %s" (name id)
+
 let set_instantiation_scope id scope =
   match id with
   | Instantiable x -> x.scope <- scope

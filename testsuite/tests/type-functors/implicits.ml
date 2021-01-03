@@ -164,3 +164,468 @@ Line 1, characters 21-39:
 Error: This expression has type int ?M.t * unit ?M.t * int list ?M.t
        but an expression was expected of type bool
 |}]
+
+let level_lower_excludes_candidates {M : Monad} =
+  let x = ref None in
+  fun {N : Monad} ->
+    (* This assignment lowers the level of the implicit argument's [t] below
+       that of N, so it should be excluded as a candidate.
+    *)
+    x := Some (return {_} 15);
+    !x;;
+
+[%%expect{|
+val level_lower_excludes_candidates :
+  {M : Monad} -> {N : Monad} -> int M.t option = <fun>
+|}]
+
+let level_lower_excludes_candidates_fail () =
+  let x = ref None in
+  fun {N : Monad} ->
+    (* This assignment lowers the level of the implicit argument's [t] below
+       that of N, so it should be excluded as a candidate.
+    *)
+    x := Some (return {_} 15);
+    !x;;
+
+[%%expect{|
+Line 7, characters 23-24:
+7 |     x := Some (return {_} 15);
+                           ^
+Error: This implicit argument is ambiguous.
+       No candidate instances were found.
+       Hint: Consider passing the desired instance directly.
+|}]
+
+let level_lower_expands_type () =
+  let x = ref None in
+  fun {N : Option_monad} ->
+    (* This assignment lowers the level of the implicit argument's [t] below
+       that of N, but it should still be accepted as a candidate by expanding
+       ['a t = 'a option].
+    *)
+    x := Some (return {_} 15);
+    !x;;
+
+[%%expect{|
+val level_lower_expands_type :
+  unit -> {N : Option_monad} -> int option option = <fun>
+|}]
+
+let map {M : Monad} = M.map;;
+
+let bind {M : Monad} = M.bind;;
+
+[%%expect{|
+val map : {M : Monad} -> 'a M.t -> f:('a -> 'b) -> 'b M.t = <fun>
+val bind : {M : Monad} -> 'a M.t -> f:('a -> 'b M.t) -> 'b M.t = <fun>
+|}]
+
+let expression_disambiguation {M : Monad} {O : Option_monad} =
+  return {_} 15 = Some 15;;
+
+[%%expect{|
+val expression_disambiguation : {M : Monad} -> {O : Option_monad} -> bool =
+  <fun>
+|}]
+
+let expression_disambiguation_fail {M : Monad} =
+  return {_} 15 = Some 15;;
+
+[%%expect{|
+Line 2, characters 10-11:
+2 |   return {_} 15 = Some 15;;
+              ^
+Error: This implicit argument is ambiguous.
+       No candidate instances were found.
+       Considered constraints:
+         int ?M.t = int option.
+       Hint: Consider passing the desired instance directly.
+|}]
+
+let nested_types {M : Monad} {N : Monad} (x : int M.t N.t M.t) = x;;
+
+[%%expect{|
+val nested_types :
+  {M : Monad} -> {N : Monad} -> int M.t N.t M.t -> int M.t N.t M.t = <fun>
+|}]
+
+let apply_nested_types {M : Monad} = nested_types {_} {_};;
+
+[%%expect{|
+val apply_nested_types : {M : Monad} -> int M.t M.t M.t -> int M.t M.t M.t =
+  <fun>
+|}]
+
+let apply_nested_types_option {O : Option_monad} = nested_types {_} {_};;
+
+[%%expect{|
+val apply_nested_types_option :
+  {O : Option_monad} -> int O.t O.t O.t -> int O.t O.t O.t = <fun>
+|}]
+
+let applied_nested_types_option =
+  apply_nested_types_option {Option_m} (Some (Some (Some 15)));;
+
+[%%expect{|
+val applied_nested_types_option : int Option_m.t Option_m.t Option_m.t =
+  Some (Some (Some 15))
+|}]
+
+let applied_nested_types_option_fail =
+  apply_nested_types_option {Option_m} (Some (Some 15));;
+
+[%%expect{|
+Line 2, characters 51-53:
+2 |   apply_nested_types_option {Option_m} (Some (Some 15));;
+                                                       ^^
+Error: This expression has type int but an expression was expected of type
+         int Option_m.t = int option
+|}]
+
+module type Functor = sig
+  type _ t
+  val map : 'a t -> f:('a -> 'b) -> 'b t
+end
+
+module Free_monad (F : Functor) = struct
+  type 'a t = Pure of 'a | Free of 'a t F.t
+
+  let return x = Pure x
+
+  let rec map t ~f =
+    match t with
+    | Pure x -> Pure (f x)
+    | Free tf -> Free (F.map tf ~f:(map ~f))
+
+  let rec bind t ~f =
+    match t with
+    | Pure x -> f x
+    | Free tf -> Free (F.map tf ~f:(bind ~f))
+end
+
+[%%expect{|
+module type Functor = sig type _ t val map : 'a t -> f:('a -> 'b) -> 'b t end
+module Free_monad :
+  functor (F : Functor) ->
+    sig
+      type 'a t = Pure of 'a | Free of 'a t F.t
+      val return : 'a -> 'a t
+      val map : 'a t -> f:('a -> 'b) -> 'b t
+      val bind : 'a t -> f:('a -> 'b t) -> 'b t
+    end
+|}]
+
+let map2 {F : Functor} x y ~f =
+  let module M = Free_monad(F) in
+  bind {M} x ~f:(fun x -> map {M} y ~f:(f x))
+
+[%%expect{|
+val map2 :
+  {F : Functor} ->
+  'a Free_monad(F).t ->
+  'b Free_monad(F).t -> f:('a -> 'b -> 'c) -> 'c Free_monad(F).t = <fun>
+|}]
+
+module type Functor_list = Functor with type 'a t = 'a list;;
+
+[%%expect{|
+module type Functor_list =
+  sig type 'a t = 'a list val map : 'a t -> f:('a -> 'b) -> 'b t end
+|}]
+
+let pure {F : Functor_list} x =
+  let module M = Free_monad(F) in
+  M.Pure x;;
+
+let free {F : Functor_list} x =
+  let module M = Free_monad(F) in
+  M.Free x;;
+
+[%%expect{|
+val pure : {F : Functor_list} -> 'a -> 'a Free_monad(F).t = <fun>
+val free : {F : Functor_list} -> 'a Free_monad(F).t F.t -> 'a Free_monad(F).t =
+  <fun>
+|}]
+
+let apply_functor_type {F : Functor_list} =
+  map2 {_} ~f:(fun x y -> x + y)
+    (free {_} [pure {_} 1; pure {_} 2; pure {_} 3])
+    (free {_} [pure {_} 5; pure {_} 6; pure {_} 7]);;
+
+[%%expect{|
+val apply_functor_type : {F : Functor_list} -> int Free_monad(F).t = <fun>
+|}]
+
+module List_f = struct
+  type 'a t = 'a list
+  let rec map xs ~f =
+    match xs with
+    | [] -> []
+    | x :: xs -> f x :: map xs ~f
+end
+
+let applied_functor_type = apply_functor_type {List_f};;
+
+[%%expect{|
+module List_f :
+  sig type 'a t = 'a list val map : 'a list -> f:('a -> 'b) -> 'b list end
+val applied_functor_type : int Free_monad(List_f).t =
+  Free_monad(List_f).Free
+   [Free_monad(List_f).Free
+     [Free_monad(List_f).Pure 6; Free_monad(List_f).Pure 7;
+      Free_monad(List_f).Pure 8];
+    Free_monad(List_f).Free
+     [Free_monad(List_f).Pure 7; Free_monad(List_f).Pure 8;
+      Free_monad(List_f).Pure 9];
+    Free_monad(List_f).Free
+     [Free_monad(List_f).Pure 8; Free_monad(List_f).Pure 9;
+      Free_monad(List_f).Pure 10]]
+|}]
+
+let apply_functor_type_fail {F : Functor} =
+  map2 {_} ~f:(fun x y -> x + y)
+    (free {_} [pure {_} 1; pure {_} 2; pure {_} 3])
+    (free {_} [pure {_} 5; pure {_} 6; pure {_} 7]);;
+
+[%%expect{|
+Line 3, characters 11-12:
+3 |     (free {_} [pure {_} 1; pure {_} 2; pure {_} 3])
+               ^
+Error: This implicit argument is ambiguous.
+       No candidate instances were found.
+       Considered constraints:
+         'a Free_monad(?F).t = int Free_monad(F).t
+         int Free_monad(?F/2).t = 'a Free_monad(?F/1).t
+         int Free_monad(?F/3).t = 'a Free_monad(?F/1).t
+         int Free_monad(?F/4).t = 'a Free_monad(?F/1).t.
+       Hint: Consider passing the desired instance directly.
+|}]
+
+module Monad_F_sig (M : Monad) = struct
+  module type S = Monad with type 'a t = 'a M.t
+end;;
+
+let pack {M : Monad} : (module Monad_F_sig(M).S) = (module M);;
+
+[%%expect{|
+module Monad_F_sig :
+  functor (M : Monad) ->
+    sig
+      module type S =
+        sig
+          type 'a t = 'a M.t
+          val return : 'a -> 'a t
+          val map : 'a t -> f:('a -> 'b) -> 'b t
+          val bind : 'a t -> f:('a -> 'b t) -> 'b t
+        end
+    end
+val pack : {M : Monad} -> (module Monad_F_sig(M).S) = <fun>
+|}]
+
+let pack_unpack {M : Monad} () =
+  let module M = (val pack {_}) in
+  M.return 15;;
+
+[%%expect{|
+val pack_unpack : {M : Monad} -> unit -> int M.t = <fun>
+|}]
+
+module Monad_F_option (M : Monad with type 'a t = 'a option) = M;;
+
+[%%expect{|
+module Monad_F_option :
+  functor
+    (M : sig
+           type 'a t = 'a option
+           val return : 'a -> 'a t
+           val map : 'a t -> f:('a -> 'b) -> 'b t
+           val bind : 'a t -> f:('a -> 'b t) -> 'b t
+         end)
+    ->
+    sig
+      type 'a t = 'a option
+      val return : 'a -> 'a t
+      val map : 'a t -> f:('a -> 'b) -> 'b t
+      val bind : 'a t -> f:('a -> 'b t) -> 'b t
+    end
+|}]
+
+let pack_unpack_functor_fail {M : Monad} () =
+  let module M = Monad_F_option(val pack {_}) in
+  M.return 15;;
+
+[%%expect{|
+Line 2, characters 42-43:
+2 |   let module M = Monad_F_option(val pack {_}) in
+                                              ^
+Error: This implicit argument is ambiguous.
+       No candidate instances were found.
+       Considered constraints:
+         'a ?M.t = 'a option.
+       Hint: Consider passing the desired instance directly.
+|}]
+
+let pack_unpack_functor {M : Option_monad} () =
+  let module M = Monad_F_option(val pack {_}) in
+  M.return 15;;
+
+[%%expect{|
+val pack_unpack_functor : {M : Option_monad} -> unit -> int option = <fun>
+|}]
+
+let pack_unpack_functor_disambiguates {M : Monad} {O : Option_monad} () =
+  let module M = Monad_F_option(val pack {_}) in
+  M.return 15;;
+
+[%%expect{|
+val pack_unpack_functor_disambiguates :
+  {M : Monad} -> {O : Option_monad} -> unit -> int option = <fun>
+|}]
+
+module type Variant_type = sig type t = A | B end;;
+
+let ret_variant_type {T : Variant_type} (x : T.t) = x;;
+
+[%%expect{|
+module type Variant_type = sig type t = A | B end
+val ret_variant_type : {T : Variant_type} -> T.t -> T.t = <fun>
+|}]
+
+let unqualified_variant_type {T : Variant_type} () =
+  ret_variant_type {_} A;;
+
+[%%expect{|
+val unqualified_variant_type : {T : Variant_type} -> unit -> T.t = <fun>
+|}]
+
+let qualified_variant_type {T : Variant_type} () =
+  ret_variant_type {_} T.A;;
+
+[%%expect{|
+val qualified_variant_type : {T : Variant_type} -> unit -> T.t = <fun>
+|}]
+
+let ambiguous_variant_type_fail {T1 : Variant_type} {T2 : Variant_type} () =
+  ret_variant_type {_} A;;
+
+[%%expect{|
+Line 2, characters 20-21:
+2 |   ret_variant_type {_} A;;
+                        ^
+Error: This implicit argument is ambiguous.
+       Could not choose between the candidates: T2 T1.
+       Hint: Consider passing the desired instance directly.
+|}]
+
+let qualified_variant_type_disambiguates {T1 : Variant_type}
+    {T2 : Variant_type} () =
+  ret_variant_type {_} T1.A;;
+
+[%%expect{|
+val qualified_variant_type_disambiguates :
+  {T1 : Variant_type} -> {T2 : Variant_type} -> unit -> T1.t = <fun>
+|}]
+
+module Variant_type = struct type t = A | B end;;
+
+[%%expect{|
+module Variant_type : sig type t = A | B end
+|}]
+
+let variant_type_adds_constraint () = ret_variant_type {_} Variant_type.A;;
+
+[%%expect{|
+Line 1, characters 56-57:
+1 | let variant_type_adds_constraint () = ret_variant_type {_} Variant_type.A;;
+                                                            ^
+Error: This implicit argument is ambiguous.
+       No candidate instances were found.
+       Considered constraints:
+         ?T.t = Variant_type.t.
+       Hint: Consider passing the desired instance directly.
+|}, Principal{|
+Line 1, characters 56-57:
+1 | let variant_type_adds_constraint () = ret_variant_type {_} Variant_type.A;;
+                                                            ^
+Error: This implicit argument is ambiguous.
+       No candidate instances were found.
+       Considered constraints:
+         ?T.t = Variant_type.t
+         ?T.t = Variant_type.t.
+       Hint: Consider passing the desired instance directly.
+|}]
+
+module type Record_type = sig type t = {x: int; y: 'a. 'a -> 'a} end;;
+
+let ret_record_type {T : Record_type} (x : T.t) = x;;
+
+[%%expect{|
+module type Record_type = sig type t = { x : int; y : 'a. 'a -> 'a; } end
+val ret_record_type : {T : Record_type} -> T.t -> T.t = <fun>
+|}]
+
+let unqualified_record_type {T : Record_type} () =
+  ret_record_type {_} {x= 15; y= fun x -> x};;
+
+[%%expect{|
+val unqualified_record_type : {T : Record_type} -> unit -> T.t = <fun>
+|}]
+
+let qualified_record_type {T : Record_type} () =
+  ret_record_type {_} {T.x= 15; y= fun x -> x};;
+
+[%%expect{|
+val qualified_record_type : {T : Record_type} -> unit -> T.t = <fun>
+|}]
+
+let ambiguous_record_type_fail {T1 : Record_type} {T2 : Record_type} () =
+  ret_record_type {_} {x= 15; y= fun x -> x};;
+
+[%%expect{|
+Line 2, characters 19-20:
+2 |   ret_record_type {_} {x= 15; y= fun x -> x};;
+                       ^
+Error: This implicit argument is ambiguous.
+       Could not choose between the candidates: T2 T1.
+       Hint: Consider passing the desired instance directly.
+|}]
+
+let qualified_record_type_disambiguates {T1 : Record_type}
+    {T2 : Record_type} () =
+  ret_record_type {_} {T1.x= 15; y= fun x -> x};;
+
+[%%expect{|
+val qualified_record_type_disambiguates :
+  {T1 : Record_type} -> {T2 : Record_type} -> unit -> T1.t = <fun>
+|}]
+
+module Record_type = struct type t = {x: int; y: 'a. 'a -> 'a} end;;
+
+[%%expect{|
+module Record_type : sig type t = { x : int; y : 'a. 'a -> 'a; } end
+|}]
+
+let record_type_adds_constraint () =
+  ret_record_type {_} {Record_type.x= 15; y= fun x -> x};;
+
+[%%expect{|
+Line 2, characters 19-20:
+2 |   ret_record_type {_} {Record_type.x= 15; y= fun x -> x};;
+                       ^
+Error: This implicit argument is ambiguous.
+       No candidate instances were found.
+       Considered constraints:
+         ?T.t = Record_type.t.
+       Hint: Consider passing the desired instance directly.
+|}, Principal{|
+Line 2, characters 19-20:
+2 |   ret_record_type {_} {Record_type.x= 15; y= fun x -> x};;
+                       ^
+Error: This implicit argument is ambiguous.
+       No candidate instances were found.
+       Considered constraints:
+         ?T.t = Record_type.t
+         ?T.t = Record_type.t.
+       Hint: Consider passing the desired instance directly.
+|}]

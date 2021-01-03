@@ -108,6 +108,7 @@ val is_functor_arg: Path.t -> t -> bool
 
 val open_implicit_hole_scope: scope:int -> t -> t
 val add_implicit_hole: implicit_hole -> t -> unit
+val add_implicit_deferred_check: Ident.t -> implicit_deferred -> t -> unit
 val implicit_holes: t -> implicit_hole list
 val implicit_hole_scope: t -> int
 

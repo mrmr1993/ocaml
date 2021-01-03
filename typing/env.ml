@@ -1283,6 +1283,32 @@ let add_implicit_hole implicit_hole env =
   implicits :=
     Ident.Map.add implicit_hole.ihl_ident (implicit_hole, mda) !implicits
 
+let add_implicit_deferred_check ident deferred env =
+  List.find (fun (_scope, implicits) ->
+      match Ident.Map.find_opt ident !implicits with
+      | Some (implicit_hole, mda) ->
+          implicits :=
+            Ident.Map.add ident
+              ( { implicit_hole with
+                  ihl_deferreds= deferred :: implicit_hole.ihl_deferreds }
+              , mda )
+              !implicits;
+          let old = implicit_hole.ihl_deferreds in
+          let undo () =
+            implicits :=
+              Ident.Map.update ident (function
+                  | Some (implicit_hole, mda) ->
+                      Some ({implicit_hole with ihl_deferreds= old}, mda)
+                  | None -> None)
+                !implicits
+          in
+          Btype.log_implicit_deferred undo;
+          true
+      | None ->
+          false)
+    env.implicit_holes
+    |> ignore
+
 let implicit_holes env =
   match env.implicit_holes with
   | [] -> fatal_error "Env.implicit_module_instances"

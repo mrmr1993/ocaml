@@ -73,11 +73,19 @@ val instantiation: t -> path option
 
 val set_instantiation: t -> path -> unit
         (** Instantiate an instantiable ident.
+            This should be called via [Btype.set_ident_instance].
             @raise [Fatal_error] if called on a non-instantiable ident, or if
             the instantiable ident has already been instantiated. *)
 
+val clear_instantiation: t -> unit
+        (** Clear an instantiated instantiable ident.
+            This is for use by [Btype], and should not be called directly.
+            @raise [Fatal_error] if called on a non-instantiable ident, or if
+            the instantiable ident hasn't been instantiated. *)
+
 val set_instantiation_scope: t -> int -> unit
         (** Set the scope of an instantiable ident.
+            This should be called via [Btype.set_ident_scope].
             @raise [Fatal_error] if called on a non-instantiable ident. *)
 
 val scope: t -> int
