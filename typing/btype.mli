@@ -252,6 +252,8 @@ val set_commu: commutable ref -> commutable -> unit
 val set_ident_scope: Ident.t -> int -> unit
 val set_ident_instance: Ident.t -> Path.t -> unit
 val log_implicit_deferred: (unit -> unit) -> unit
+val log_subst:
+  (type_expr * type_expr) list ref -> (type_expr * type_expr) list -> unit
 
 (**** Forward declarations ****)
 val print_raw: (Format.formatter -> type_expr -> unit) ref

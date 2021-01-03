@@ -81,6 +81,8 @@ type change =
   | Cident_scope of Ident.t * int
   | Cident_instance of Ident.t
   | Cimplicit_deferred of (unit -> unit)
+  | Csubst of
+      (type_expr * type_expr) list ref * (type_expr * type_expr) list
 
 type changes =
     Change of change * changes ref
@@ -746,6 +748,7 @@ let undo_change = function
   | Cident_scope (ident, scope) -> Ident.set_instantiation_scope ident scope
   | Cident_instance ident -> Ident.clear_instantiation ident
   | Cimplicit_deferred undo -> undo ()
+  | Csubst (r, v) -> r := v
 
 type snapshot = changes ref * int
 let last_snapshot = s_ref 0
@@ -806,6 +809,7 @@ let set_ident_scope ident scope =
 let set_ident_instance ident path =
   log_change (Cident_instance ident); Ident.set_instantiation ident path
 let log_implicit_deferred undo = log_change (Cimplicit_deferred undo)
+let log_subst rs v = log_change (Csubst (rs, v))
 
 let snapshot () =
   let old = !last_snapshot in
