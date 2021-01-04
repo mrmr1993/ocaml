@@ -644,7 +644,7 @@ let () =
          let acc =
            Sig_module (id, Mp_present,
                        {md with md_type = trim_signature md.md_type},
-                       Implicit, Trec_not, Exported) :: acc in
+                       Explicit, Trec_not, Exported) :: acc in
          match md.md_type with
          | Mty_alias path ->
              let md = Env.find_module path env in
