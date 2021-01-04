@@ -147,7 +147,7 @@ let resolve_implicits env =
       if !is_finished then
         List.map2
           (fun
-              ({Types.ihl_loc= loc; ihl_ident= id; _} as implicit_hole)
+              ({Types.ihl_loc= loc; ihl_local_ident= id; _} as implicit_hole)
               candidates ->
             match candidates with
             | [(_path, modl)] -> (id, loc, modl)

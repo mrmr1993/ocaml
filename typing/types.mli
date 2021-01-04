@@ -582,6 +582,7 @@ type implicit_deferred =
 
 type implicit_hole =
   { ihl_ident: Ident.t
+  ; ihl_local_ident: Ident.t
   ; ihl_loc: Location.t
   ; ihl_module_type: module_type
   ; ihl_deferreds: implicit_deferred list }
