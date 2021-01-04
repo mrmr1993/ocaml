@@ -499,8 +499,8 @@ let rec check_constraints_rec env loc visited ty =
       in
       Private_type_expr.set_desc ty desc;
       let env =
-        Env.add_module scoped_id Mp_present (!Ctype.mty_of_package' env pack)
-          env
+        Env.add_module ~implicit_:Explicit scoped_id Mp_present
+          (!Ctype.mty_of_package' env pack) env
       in
       check_constraints_rec env loc visited t
   | _ ->

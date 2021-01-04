@@ -173,7 +173,7 @@ module Exp:
     val override: ?loc:loc -> ?attrs:attrs -> (str * expression) list
                   -> expression
     val letmodule: ?loc:loc -> ?attrs:attrs -> str_opt -> module_expr
-                   -> expression -> expression
+                   -> implicit_flag -> expression -> expression
     val letexception:
       ?loc:loc -> ?attrs:attrs -> extension_constructor -> expression
       -> expression
@@ -331,7 +331,7 @@ module Str:
 module Md:
   sig
     val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?text:text ->
-      str_opt -> module_type -> module_declaration
+      ?implicit_:implicit_flag -> str_opt -> module_type -> module_declaration
   end
 
 (** Module substitutions *)
@@ -352,14 +352,15 @@ module Mtd:
 module Mb:
   sig
     val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?text:text ->
-      str_opt -> module_expr -> module_binding
+      ?implicit_:implicit_flag -> str_opt -> module_expr -> module_binding
   end
 
 (** Opens *)
 module Opn:
   sig
     val mk: ?loc: loc -> ?attrs:attrs -> ?docs:docs ->
-      ?override:override_flag -> 'a -> 'a open_infos
+      ?override:override_flag -> ?implicit_:implicit_flag -> 'a ->
+      'a open_infos
   end
 
 (** Includes *)

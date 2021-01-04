@@ -28,6 +28,16 @@ let run_implicit_deferred = function
   | Types.Idfr_unify (_ty1, _ty2, run) -> run ()
   | Types.Idfr_marker -> ()
 
+let raise_ambiguous ({Types.ihl_loc= loc; _} as implicit_hole) candidates env =
+  let candidates = List.map fst candidates in
+  let equalities =
+    List.filter_map (function
+        | Types.Idfr_unify (ty1, ty2, _run) -> Some (ty1, ty2)
+        | _ -> None)
+      implicit_hole.Types.ihl_deferreds
+  in
+  raise (Error (loc, env, Ambiguous_functor_argument (candidates, equalities)))
+
 let resolve_implicits env =
   let implicit_instances =
     List.map (fun path -> (path, Env.find_module path env))
@@ -69,16 +79,15 @@ let resolve_implicits env =
             implicit_instances
         in
         begin match candidates with
-        | [(path, _modl)] -> instantiate_implicit implicit_hole path
-        | [] ->
-            let equalities =
-              List.filter_map (function
-                  | Types.Idfr_unify (ty1, ty2, _run) -> Some (ty1, ty2)
-                  | _ -> None)
-                implicit_hole.ihl_deferreds
-            in
-            raise
-              (Error (loc, env, Ambiguous_functor_argument ([], equalities)))
+        | [(path, _modl)] ->
+            (* We re-fetch the hole from the environment, to ensure that we
+               evaluate any constraints that were added this round.
+            *)
+            let implicit_hole = Env.find_implicit_hole id env in
+            begin try instantiate_implicit implicit_hole path
+            with _ -> raise_ambiguous implicit_hole [] env
+            end
+        | [] -> raise_ambiguous implicit_hole [] env
         | _ -> ()
         end;
         candidates )
@@ -93,7 +102,7 @@ let resolve_implicits env =
       implicit_holes;
     let candidates =
       List.map2
-        (fun ({Types.ihl_loc= loc; _} as implicit_hole) candidates ->
+        (fun ({Types.ihl_ident= id; _} as implicit_hole) candidates ->
           match candidates with
           | [_] -> candidates
           | _ ->
@@ -109,17 +118,20 @@ let resolve_implicits env =
                   candidates
               in
               begin match candidates with
-              | [(path, _modl)] -> instantiate_implicit implicit_hole path
-              | [] ->
-                  let equalities =
-                    List.filter_map (function
-                        | Types.Idfr_unify (ty1, ty2, _run) -> Some (ty1, ty2)
-                        | _ -> None)
-                      implicit_hole.ihl_deferreds
-                  in
-                  raise
-                    (Error
-                      (loc, env, Ambiguous_functor_argument ([], equalities)))
+              | [(path, _modl)] ->
+                  (* Do another loop to check whether resolving this instance
+                     adds new constraints to a module we've already checked
+                     this round.
+                  *)
+                  is_finished := false;
+                  (* We re-fetch the hole from the environment, to ensure that
+                     we evaluate any constraints that were added this round.
+                  *)
+                  let implicit_hole = Env.find_implicit_hole id env in
+                  begin try instantiate_implicit implicit_hole path
+                  with _ -> raise_ambiguous implicit_hole [] env
+                  end
+              | [] -> raise_ambiguous implicit_hole [] env
               | _ ->
                   match implicit_hole.ihl_deferreds with
                   | Types.Idfr_marker :: _ ->
@@ -135,22 +147,11 @@ let resolve_implicits env =
       if !is_finished then
         List.map2
           (fun
-              ({Types.ihl_loc= loc; ihl_ident= id; _} as implicit_hole)
+              ({Types.ihl_loc= loc; ihl_local_ident= id; _} as implicit_hole)
               candidates ->
             match candidates with
             | [(_path, modl)] -> (id, loc, modl)
-            | _ ->
-                let candidates = List.map fst candidates in
-                let equalities =
-                  List.filter_map (function
-                      | Types.Idfr_unify (ty1, ty2, _run) -> Some (ty1, ty2)
-                      | _ -> None)
-                    implicit_hole.Types.ihl_deferreds
-                in
-                raise
-                  (Error
-                    ( loc, env
-                    , Ambiguous_functor_argument (candidates, equalities))) )
+            | _ -> raise_ambiguous implicit_hole candidates env )
           implicit_holes candidates
       else go candidates
   in

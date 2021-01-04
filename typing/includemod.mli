@@ -69,6 +69,9 @@ type symptom =
   | Module_types of module_type * module_type
   | Modtype_infos of Ident.t * modtype_declaration * modtype_declaration
   | Modtype_permutation of Types.module_type * Typedtree.module_coercion
+  | Module_implicit of
+      Ident.t * module_type * Asttypes.implicit_flag * Location.t *
+      Ident.t * module_type * Asttypes.implicit_flag * Location.t
   | Interface_mismatch of string * string
   | Class_type_declarations of
       Ident.t * class_type_declaration * class_type_declaration *

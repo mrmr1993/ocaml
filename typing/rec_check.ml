@@ -152,7 +152,7 @@ let classify_expression : Typedtree.expression -> sd =
 
     (* non-binding cases *)
     | Texp_open (_, e)
-    | Texp_letmodule (_, _, _, _, e)
+    | Texp_letmodule (_, _, _, _, _, e)
     | Texp_sequence (_, e)
     | Texp_letexception (_, e) ->
         classify_expression env e
@@ -528,7 +528,7 @@ let rec expression : Typedtree.expression -> term_judg =
          G |- let <bindings> in body : m
       *)
       value_bindings rec_flag bindings >> expression body
-    | Texp_letmodule (x, _, _, mexp, e) ->
+    | Texp_letmodule (x, _, _, mexp, _, e) ->
       module_binding (x, mexp) >> expression e
     | Texp_match (e, cases, _) ->
       (*

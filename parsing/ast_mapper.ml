@@ -437,9 +437,9 @@ module E = struct
     | Pexp_override sel ->
         override ~loc ~attrs
           (List.map (map_tuple (map_loc sub) (sub.expr sub)) sel)
-    | Pexp_letmodule (s, me, e) ->
+    | Pexp_letmodule (s, me, implicit_, e) ->
         letmodule ~loc ~attrs (map_loc sub s) (sub.module_expr sub me)
-          (sub.expr sub e)
+          implicit_ (sub.expr sub e)
     | Pexp_letexception (cd, e) ->
         letexception ~loc ~attrs
           (sub.extension_constructor sub cd)
@@ -623,10 +623,11 @@ let default_mapper =
     binding_op = E.map_binding_op;
 
     module_declaration =
-      (fun this {pmd_name; pmd_type; pmd_attributes; pmd_loc} ->
+      (fun this {pmd_name; pmd_type; pmd_implicit; pmd_attributes; pmd_loc} ->
          Md.mk
            (map_loc this pmd_name)
            (this.module_type this pmd_type)
+           ~implicit_:pmd_implicit
            ~attrs:(this.attributes this pmd_attributes)
            ~loc:(this.location this pmd_loc)
       );
@@ -650,17 +651,21 @@ let default_mapper =
       );
 
     module_binding =
-      (fun this {pmb_name; pmb_expr; pmb_attributes; pmb_loc} ->
+      (fun this {pmb_name; pmb_expr; pmb_implicit; pmb_attributes; pmb_loc} ->
          Mb.mk (map_loc this pmb_name) (this.module_expr this pmb_expr)
+           ~implicit_:pmb_implicit
            ~attrs:(this.attributes this pmb_attributes)
            ~loc:(this.location this pmb_loc)
       );
 
 
     open_declaration =
-      (fun this {popen_expr; popen_override; popen_attributes; popen_loc} ->
+      (fun this
+          { popen_expr; popen_override; popen_implicit; popen_attributes
+          ; popen_loc} ->
          Opn.mk (this.module_expr this popen_expr)
            ~override:popen_override
+           ~implicit_:popen_implicit
            ~loc:(this.location this popen_loc)
            ~attrs:(this.attributes this popen_attributes)
       );

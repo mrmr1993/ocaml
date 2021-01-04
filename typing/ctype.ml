@@ -621,7 +621,7 @@ let rec free_vars_rec id_pairs real ty =
         *)
         really_closed :=
           Some
-            (Env.add_module scoped_id Mp_present
+            (Env.add_module ~implicit_:Explicit scoped_id Mp_present
               (mty_of_package env (p, [], [])) env);
         free_vars_rec id_pairs true t;
         really_closed := Some env
@@ -922,8 +922,8 @@ let rec check_scope_escape env id_pairs level ty =
            there is no need to place them in the environment.
         *)
         let env =
-          Env.add_module scoped_id Mp_present (mty_of_package env (p, [], []))
-            env
+          Env.add_module ~implicit_:Explicit scoped_id Mp_present
+            (mty_of_package env (p, [], [])) env
         in
         let id_pairs' = (id, scoped_id) :: id_pairs in
         check_scope_escape env id_pairs' level t
@@ -1055,8 +1055,8 @@ let rec update_level env id_pairs level expand ty =
            instead of expanding them.
         *)
         let env =
-          Env.add_module scoped_id Mp_present (mty_of_package env (p, [], []))
-            env
+          Env.add_module ~implicit_:Explicit scoped_id Mp_present
+            (mty_of_package env (p, [], [])) env
         in
         let id_pairs' = (id, scoped_id) :: id_pairs in
         update_level env id_pairs' level expand t
@@ -1153,8 +1153,8 @@ let rec lower_contravariant env id_pairs var_level visited contra ty =
            There is no need to place them in the environment, so we omit them.
         *)
         let env =
-          Env.add_module scoped_id Mp_present (mty_of_package env (p, [], []))
-            env
+          Env.add_module ~implicit_:Explicit scoped_id Mp_present
+            (mty_of_package env (p, [], [])) env
         in
         let id_pairs' = (id, scoped_id) :: id_pairs in
         lower_contravariant env id_pairs' var_level visited contra t
@@ -2158,8 +2158,8 @@ let rec occur_rec env id_pairs allow_recursive visited ty0 = function
       let p = Path.subst id_pairs p in
       let scoped_id = Ident.create_scoped ~scope:ty.level (Ident.name id) in
       let env =
-        Env.add_module scoped_id Mp_present (mty_of_package env (p, nl, tl))
-          env
+        Env.add_module ~implicit_:Explicit scoped_id Mp_present
+          (mty_of_package env (p, nl, tl)) env
       in
       let id_pairs' = (id, scoped_id) :: id_pairs in
       occur_rec env id_pairs' allow_recursive visited ty0 t
@@ -2242,8 +2242,8 @@ let rec local_non_recursive_abbrev ~allow_rec strict visited env id_pairs p ty =
            avoid expanding them to check their contents.
         *)
         let env =
-          Env.add_module scoped_id Mp_present (mty_of_package env (p, [], []))
-            env
+          Env.add_module ~implicit_:Explicit scoped_id Mp_present
+            (mty_of_package env (p, [], [])) env
         in
         let id_pairs' = (id, scoped_id) :: id_pairs in
         local_non_recursive_abbrev ~allow_rec true visited env id_pairs' p t
@@ -2360,7 +2360,7 @@ let occur_univar_or_unscoped env ?(pre_id_pairs = []) id_pairs ty =
              skip re-checking their expansions.
           *)
           let env =
-            Env.add_module scoped_id Mp_present
+            Env.add_module ~implicit_:Explicit scoped_id Mp_present
               (mty_of_package env (p, [], [])) env
           in
           let id_pairs' = (id, scoped_id) :: id_pairs in
@@ -2427,7 +2427,7 @@ let univars_escape env id_pairs univar_pairs vl ty =
              avoid attempting to expand them.
           *)
           let env =
-            Env.add_module scoped_id Mp_present
+            Env.add_module ~implicit_:Explicit scoped_id Mp_present
               (mty_of_package env (p, [], [])) env
           in
           let id_pairs' = (id, scoped_id) :: id_pairs in
@@ -2640,7 +2640,7 @@ let reify env ?(pre_id_pairs = []) id_pairs t =
              avoid rechecking these substituted types.
           *)
           let env =
-            Env.add_module scoped_id Mp_present
+            Env.add_module ~implicit_:Explicit scoped_id Mp_present
               (mty_of_package env (p, [], [])) env
           in
           let id_pairs' = (id, scoped_id) :: id_pairs in
@@ -2779,9 +2779,9 @@ let rec mcomp type_pairs env id_pairs1 id_pairs2 t1 t2 =
             in
             let env =
               env
-              |> Env.add_module scoped_id1 Mp_present
+              |> Env.add_module ~implicit_:Explicit scoped_id1 Mp_present
                   (mty_of_package env (p1, nl1, tl1))
-              |> Env.add_module scoped_id2 Mp_present
+              |> Env.add_module ~implicit_:Explicit scoped_id2 Mp_present
                   (mty_of_package env (p2, nl2, tl2))
             in
             let id_pairs1 = (id1, scoped_id1) :: id_pairs1 in
@@ -3014,7 +3014,7 @@ let complete_type_list ?(allow_absent=false) env nl1 lv2 mty2 nl2 tl2 =
      It'd be nice if we avoided creating such temporary dummy modules and broken
      environments though. *)
   let id2 = Ident.create_local "Pkg" in
-  let env' = Env.add_module id2 Mp_present mty2 env in
+  let env' = Env.add_module ~implicit_:Explicit id2 Mp_present mty2 env in
   let rec complete nl1 ntl2 =
     match nl1, ntl2 with
       [], _ -> ntl2
@@ -3493,7 +3493,7 @@ and unify3 ?(stub_unify = false) env id_pairs1 id_pairs2 t1 t1' t2 t2' =
           in
           let env' =
             ref
-              (Env.add_module scoped_id Mp_present
+              (Env.add_module ~implicit_:Explicit scoped_id Mp_present
                 (mty_of_package !env (p, nl1, tl)) !env)
           in
           let id_pairs1 = (id1, scoped_id) :: id_pairs1 in
@@ -4063,7 +4063,7 @@ let rec moregen inst_nongen type_pairs env id_pairs1 id_pairs2 t1 t2 =
                 Ident.create_scoped ~scope:t1.level (Ident.name id1)
               in
               let env =
-                Env.add_module scoped_id Mp_present
+                Env.add_module ~implicit_:Explicit scoped_id Mp_present
                  (mty_of_package env (p, nl1, tl)) env
               in
               let id_pairs1 = (id1, scoped_id) :: id_pairs1 in
@@ -4422,7 +4422,7 @@ let rec eqtype rename type_pairs subst env id_pairs1 id_pairs2 t1 t2 =
                 Ident.create_scoped ~scope:t1.level (Ident.name id1)
               in
               let env =
-                Env.add_module scoped_id Mp_present
+                Env.add_module ~implicit_:Explicit scoped_id Mp_present
                  (mty_of_package env (p, nl1, tl)) env
               in
               let id_pairs1 = (id1, scoped_id) :: id_pairs1 in
@@ -5126,8 +5126,8 @@ let rec build_subtype env id_pairs visited loops posi level t =
       let tl = List.map fst tl' in
       let scoped_id = Ident.create_scoped ~scope:t.level (Ident.name id) in
       let env =
-        Env.add_module scoped_id Mp_present (mty_of_package env (p', n, tl))
-          env
+        Env.add_module ~implicit_:Explicit scoped_id Mp_present
+          (mty_of_package env (p', n, tl)) env
       in
       let id' = Ident.create_unscoped (Ident.name id) in
       let id_pairs' = (id', scoped_id) :: (id, scoped_id) :: id_pairs in
@@ -5286,7 +5286,7 @@ let rec subtype_rec env id_pairs1 id_pairs2 trace t1 t2 cstrs =
             Ident.create_scoped ~scope:t2.level (Ident.name id2)
           in
           let env =
-            Env.add_module scoped_id Mp_present
+            Env.add_module ~implicit_:Explicit scoped_id Mp_present
               (mty_of_package env (p, nl2, tl)) env
           in
           let id_pairs1 = (id1, scoped_id) :: id_pairs1 in
@@ -5529,8 +5529,8 @@ let rec closed_schema_rec env id_pairs ty =
            environment.
         *)
         let env =
-          Env.add_module scoped_id Mp_present (mty_of_package env (p, [], []))
-            env
+          Env.add_module ~implicit_:Explicit scoped_id Mp_present
+            (mty_of_package env (p, [], [])) env
         in
         let id_pairs' = (id, scoped_id) :: id_pairs in
         closed_schema_rec env id_pairs' t
@@ -5735,7 +5735,7 @@ let rec nondep_type_rec ?(expand_private=false) env id_pairs ids ty =
           let tl = List.map (nondep_type_rec env id_pairs ids) tl in
           let scoped_id = Ident.create_scoped ~scope:ty.level (Ident.name id) in
           let env =
-            Env.add_module scoped_id Mp_present
+            Env.add_module ~implicit_:Explicit scoped_id Mp_present
               (mty_of_package env (p, nl, tl)) env
           in
           let id' = Ident.create_unscoped (Ident.name id) in

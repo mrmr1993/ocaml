@@ -70,7 +70,7 @@ let remembered = ref Ident.empty
 let rec remember phrase_name i = function
   | [] -> ()
   | Sig_value  (id, _, _) :: rest
-  | Sig_module (id, _, _, _, _) :: rest
+  | Sig_module (id, _, _, _, _, _) :: rest
   | Sig_typext (id, _, _, _) :: rest
   | Sig_class  (id, _, _, _) :: rest ->
       remembered := Ident.add id (phrase_name, i) !remembered;

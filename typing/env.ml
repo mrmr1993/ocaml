@@ -86,7 +86,8 @@ type summary =
   | Env_value of summary * Ident.t * value_description
   | Env_type of summary * Ident.t * type_declaration
   | Env_extension of summary * Ident.t * extension_constructor
-  | Env_module of summary * Ident.t * module_presence * module_declaration
+  | Env_module of
+      summary * Ident.t * module_presence * module_declaration * implicit_flag
   | Env_modtype of summary * Ident.t * modtype_declaration
   | Env_class of summary * Ident.t * class_declaration
   | Env_cltype of summary * Ident.t * class_type_declaration
@@ -407,7 +408,7 @@ type t = {
   local_constraints: type_declaration Path.Map.t;
   flags: int;
   implicit_holes: (int * (implicit_hole * module_data) Ident.Map.t ref) list;
-  implicit_instances: Path.t list
+  implicit_instances: (unit, unit) IdTbl.t
 }
 
 and module_declaration_lazy =
@@ -447,6 +448,7 @@ and structure_components = {
   mutable comp_types: type_data NameMap.t;
   mutable comp_modules: module_data NameMap.t;
   mutable comp_modtypes: modtype_data NameMap.t;
+  mutable comp_implicit_instances: unit NameMap.t;
   mutable comp_classes: class_data NameMap.t;
   mutable comp_cltypes: cltype_data NameMap.t;
 }
@@ -508,6 +510,7 @@ let empty_structure =
     comp_labels = NameMap.empty;
     comp_types = NameMap.empty;
     comp_modules = NameMap.empty; comp_modtypes = NameMap.empty;
+    comp_implicit_instances = NameMap.empty;
     comp_classes = NameMap.empty;
     comp_cltypes = NameMap.empty }
 
@@ -582,7 +585,7 @@ let check_shadowing env = function
   | `Class_type (Some _) -> Some "class type"
   | `Constructor _ | `Label _
   | `Value None | `Type None | `Module None | `Module_type None
-  | `Class None | `Class_type None | `Component None ->
+  | `Class None | `Class_type None | `Component None | `Implicit_instance _ ->
       None
 
 let subst_modtype_maker (subst, scoping, md) =
@@ -597,7 +600,7 @@ let empty = {
   flags = 0;
   functor_args = Ident.empty;
   implicit_holes = [];
-  implicit_instances = []
+  implicit_instances = IdTbl.empty
  }
 
 let in_signature b env =
@@ -1309,6 +1312,14 @@ let add_implicit_deferred_check ident deferred env =
     env.implicit_holes
     |> ignore
 
+let find_implicit_hole ident env =
+  match
+    List.find_map (fun (_, map) -> Ident.Map.find_opt ident !map)
+      env.implicit_holes
+  with
+  | Some (implicit_hole, _) -> implicit_hole
+  | None -> raise Not_found
+
 let implicit_holes env =
   match env.implicit_holes with
   | [] -> fatal_error "Env.implicit_module_instances"
@@ -1321,10 +1332,8 @@ let implicit_hole_scope env =
   | [] -> fatal_error "Env.implicit_module_scope"
   | (scope, _implicits) :: _ -> scope
 
-let add_implicit_instance path env =
-  {env with implicit_instances= path :: env.implicit_instances}
-
-let implicit_instances env = env.implicit_instances
+let add_implicit_instance id env =
+  {env with implicit_instances = IdTbl.add id () env.implicit_instances}
 
 (* Copying types associated with values *)
 
@@ -1542,11 +1551,11 @@ let prefix_idents root freshening_sub prefixing_sub sg =
         freshening_sub
         (Subst.add_type id' p prefixing_sub)
         rem
-    | Sig_module(id, pres, md, rs, vis) :: rem ->
+    | Sig_module(id, pres, md, implicit_, rs, vis) :: rem ->
       let p = Pdot(root, Ident.name id) in
       let id', freshening_sub = refresh id Subst.add_module freshening_sub in
       prefix_idents root
-        ((Sig_module(id', pres, md, rs, vis), p) :: items_and_paths)
+        ((Sig_module(id', pres, md, implicit_, rs, vis), p) :: items_and_paths)
         freshening_sub
         (Subst.add_module id' p prefixing_sub)
         rem
@@ -1627,6 +1636,7 @@ let rec components_of_module_maker
         { comp_values = NameMap.empty;
           comp_constrs = NameMap.empty;
           comp_labels = NameMap.empty; comp_types = NameMap.empty;
+          comp_implicit_instances = NameMap.empty;
           comp_modules = NameMap.empty; comp_modtypes = NameMap.empty;
           comp_classes = NameMap.empty; comp_cltypes = NameMap.empty }
       in
@@ -1694,7 +1704,7 @@ let rec components_of_module_maker
             let addr = next_address () in
             let cda = { cda_description = descr; cda_address = Some addr } in
             c.comp_constrs <- add_to_tbl (Ident.name id) cda c.comp_constrs
-        | Sig_module(id, pres, md, _, _) ->
+        | Sig_module(id, pres, md, implicit_, _, _) ->
             let md' =
               (* The prefixed items get the same scope as [cm_path], which is
                  the prefix. *)
@@ -1725,8 +1735,12 @@ let rec components_of_module_maker
             in
             c.comp_modules <-
               NameMap.add (Ident.name id) mda c.comp_modules;
+            if implicit_ = Implicit then
+              c.comp_implicit_instances <-
+                NameMap.add (Ident.name id) () c.comp_implicit_instances;
             env :=
-              store_module ~freshening_sub ~check:None id addr pres md !env
+              store_module ~freshening_sub ~check:None ~implicit_ id addr pres
+                md !env
         | Sig_modtype(id, decl, _) ->
             let fresh_decl =
               (* the fresh_decl is only going in the local temporary env, and
@@ -1904,7 +1918,7 @@ and store_extension ~check ~rebind id addr ext env =
     constrs = TycompTbl.add id cda env.constrs;
     summary = Env_extension(env.summary, id, ext) }
 
-and store_module ~check ~freshening_sub id addr presence md env =
+and store_module ~check ~freshening_sub ~implicit_ id addr presence md env =
   let loc = md.md_loc in
   Option.iter
     (fun f -> check_usage loc id md.md_uid f !module_declarations) check;
@@ -1925,7 +1939,12 @@ and store_module ~check ~freshening_sub id addr presence md env =
   in
   { env with
     modules = IdTbl.add id (Mod_local mda) env.modules;
-    summary = Env_module(env.summary, id, presence, md) }
+    implicit_instances=
+      begin match implicit_ with
+      | Implicit -> IdTbl.add id () env.implicit_instances
+      | Explicit -> env.implicit_instances
+      end;
+    summary = Env_module(env.summary, id, presence, md, implicit_) }
 
 and store_modtype id info env =
   { env with
@@ -1997,7 +2016,7 @@ and add_extension ~check ~rebind id ext env =
   let addr = extension_declaration_address env id ext in
   store_extension ~check ~rebind id addr ext env
 
-and add_module_declaration ?(arg=false) ~check id presence md env =
+and add_module_declaration ?(arg=false) ~check ~implicit_ id presence md env =
   let check =
     if not check then
       None
@@ -2007,7 +2026,9 @@ and add_module_declaration ?(arg=false) ~check id presence md env =
       Some (fun s -> Warnings.Unused_module s)
   in
   let addr = module_declaration_address env id presence md in
-  let env = store_module ~freshening_sub:None ~check id addr presence md env in
+  let env =
+    store_module ~freshening_sub:None ~check ~implicit_ id addr presence md env
+  in
   if arg then add_functor_arg id env else env
 
 and add_modtype id info env =
@@ -2020,8 +2041,8 @@ and add_class id ty env =
 and add_cltype id ty env =
   store_cltype id ty env
 
-let add_module ?arg id presence mty env =
-  add_module_declaration ~check:false ?arg id presence (md mty) env
+let add_module ?arg ~implicit_ id presence mty env =
+  add_module_declaration ~check:false ?arg ~implicit_ id presence (md mty) env
 
 let add_local_type path info env =
   { env with
@@ -2047,9 +2068,9 @@ let enter_extension ~scope ~rebind name ext env =
   let env = store_extension ~check:true ~rebind id addr ext env in
   (id, env)
 
-let enter_module_declaration ~scope ?arg s presence md env =
+let enter_module_declaration ~scope ?arg ~implicit_ s presence md env =
   let id = Ident.create_scoped ~scope s in
-  (id, add_module_declaration ?arg ~check:true id presence md env)
+  (id, add_module_declaration ?arg ~check:true ~implicit_ id presence md env)
 
 let enter_modtype ~scope name mtd env =
   let id = Ident.create_scoped ~scope name in
@@ -2067,8 +2088,8 @@ let enter_cltype ~scope name desc env =
   let env = store_cltype id desc env in
   (id, env)
 
-let enter_module ~scope ?arg s presence mty env =
-  enter_module_declaration ~scope ?arg s presence (md mty) env
+let enter_module ~scope ?arg ~implicit_ s presence mty env =
+  enter_module_declaration ~scope ?arg ~implicit_ s presence (md mty) env
 
 (* Insertion of all components of a signature *)
 
@@ -2078,8 +2099,8 @@ let add_item comp env =
   | Sig_type(id, decl, _, _)  -> add_type ~check:false id decl env
   | Sig_typext(id, ext, _, _) ->
       add_extension ~check:false ~rebind:false id ext env
-  | Sig_module(id, presence, md, _, _) ->
-      add_module_declaration ~check:false id presence md env
+  | Sig_module(id, presence, md, implicit_, _, _) ->
+      add_module_declaration ~check:false ~implicit_ id presence md env
   | Sig_modtype(id, decl, _)  -> add_modtype id decl env
   | Sig_class(id, decl, _, _) -> add_class id decl env
   | Sig_class_type(id, decl, _, _) -> add_cltype id decl env
@@ -2138,6 +2159,10 @@ let add_components slot root env0 comps =
   let modules =
     add (fun x -> `Module x) comps.comp_modules env0.modules
   in
+  let implicit_instances =
+    add (fun x -> `Implicit_instance x) comps.comp_implicit_instances
+      env0.implicit_instances
+  in
   { env0 with
     summary = Env_open(env0.summary, root);
     constrs;
@@ -2148,7 +2173,21 @@ let add_components slot root env0 comps =
     classes;
     cltypes;
     modules;
+    implicit_instances;
   }
+
+let open_implicits root env0 : (_,_) result =
+  match get_components_res (find_module_components root env0) with
+  | Error _ -> Error `Not_found
+  | exception Not_found -> Error `Not_found
+  | Ok (Functor_comps _) -> Error `Functor
+  | Ok (Structure_comps comps) ->
+      let add w comps env0 = IdTbl.add_open None w root comps env0 in
+      let implicit_instances =
+        add (fun x -> `Implicit_instance x) comps.comp_implicit_instances
+          env0.implicit_instances
+      in
+      Ok {env0 with implicit_instances}
 
 let open_signature slot root env0 : (_,_) result =
   match get_components_res (find_module_components root env0) with
@@ -2169,7 +2208,7 @@ let open_pers_signature name env =
 
 let open_signature
     ?(used_slot = ref false)
-    ?(loc = Location.none) ?(toplevel = false)
+    ?(loc = Location.none) ?(toplevel = false) ?(implicit_ = false)
     ovf root env =
   let unused =
     match ovf with
@@ -2183,7 +2222,8 @@ let open_signature
   and warn_shadow_lc =
     Warnings.is_active (Warnings.Open_shadow_label_constructor ("",""))
   in
-  if not toplevel && not loc.Location.loc_ghost
+  if implicit_ then open_implicits root env
+  else if not toplevel && not loc.Location.loc_ghost
      && (warn_unused || warn_shadow_id || warn_shadow_lc)
   then begin
     let used = used_slot in
@@ -3042,6 +3082,10 @@ and fold_types f =
 and fold_modtypes f =
   find_all wrap_identity
     (fun env -> env.modtypes) (fun sc -> sc.comp_modtypes) f
+and fold_implicit_instances f =
+  find_all wrap_identity
+    (fun env -> env.implicit_instances) (fun sc -> sc.comp_implicit_instances)
+    f
 and fold_classes f =
   find_all wrap_identity (fun env -> env.classes) (fun sc -> sc.comp_classes)
     (fun k p clda acc -> f k p clda.clda_declaration acc)
@@ -3085,8 +3129,8 @@ let filter_non_loaded_persistent f env =
           Env_type (filter_summary s ids, id, td)
       | Env_extension (s, id, ec) ->
           Env_extension (filter_summary s ids, id, ec)
-      | Env_module (s, id, mp, md) ->
-          Env_module (filter_summary s ids, id, mp, md)
+      | Env_module (s, id, mp, md, implicit_) ->
+          Env_module (filter_summary s ids, id, mp, md, implicit_)
       | Env_modtype (s, id, md) ->
           Env_modtype (filter_summary s ids, id, md)
       | Env_class (s, id, cd) ->
@@ -3190,6 +3234,10 @@ let extract_modtypes path env =
   fold_modtypes (fun name _ _ acc -> name :: acc) path env []
 let extract_cltypes path env =
   fold_cltypes (fun name _ _ acc -> name :: acc) path env []
+
+let implicit_instances env =
+  fold_implicit_instances (fun _ path _ acc -> path :: acc) None env []
+
 let extract_instance_variables env =
   fold_values
     (fun name _ descr acc ->

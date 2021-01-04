@@ -155,10 +155,10 @@ let type_module =
 (* Forward declaration, to be filled in by Typemod.type_open *)
 
 let type_open :
-  (?used_slot:bool ref -> override_flag -> Env.t -> Location.t ->
-   Longident.t loc -> Path.t * Env.t)
+  (?used_slot:bool ref -> ?implicit_:bool -> override_flag -> Env.t ->
+   Location.t -> Longident.t loc -> Path.t * Env.t)
     ref =
-  ref (fun ?used_slot:_ _ -> assert false)
+  ref (fun ?used_slot:_ ?implicit_:_ _ -> assert false)
 
 let type_open_decl :
   (?used_slot:bool ref -> Env.t -> Parsetree.open_declaration
@@ -2081,7 +2081,7 @@ let rec final_subexpression exp =
   | Texp_try (e, _)
   | Texp_ifthenelse (_, e, _)
   | Texp_match (_, {c_rhs=e} :: _, _)
-  | Texp_letmodule (_, _, _, _, e)
+  | Texp_letmodule (_, _, _, _, _, e)
   | Texp_letexception (_, e)
   | Texp_open (_, e)
     -> final_subexpression e
@@ -2156,7 +2156,7 @@ let rec is_nonexpansive exp =
       Vars.fold (fun _ (mut,_,_) b -> decr count; b && mut = Immutable)
         vars true &&
       !count = 0
-  | Texp_letmodule (_, _, _, mexp, e)
+  | Texp_letmodule (_, _, _, mexp, _, e)
   | Texp_open ({ open_expr = mexp; _}, e) ->
       is_nonexpansive_mod mexp && is_nonexpansive e
   | Texp_pack mexp ->
@@ -2364,7 +2364,7 @@ let check_partial_application statement exp =
               | Texp_let (_, _, e)
               | Texp_sequence (_, e)
               | Texp_letexception (_, e)
-              | Texp_letmodule (_, _, _, _, e) ->
+              | Texp_letmodule (_, _, _, _, _, e) ->
                   loop e
               | _ ->
                   let loc =
@@ -2403,7 +2403,7 @@ let check_partial_application statement exp =
             | Texp_ifthenelse (_, e1, Some e2) ->
                 check e1; check e2
             | Texp_let (_, _, e) | Texp_sequence (_, e) | Texp_open (_, e)
-            | Texp_letexception (_, e) | Texp_letmodule (_, _, _, _, e) ->
+            | Texp_letexception (_, e) | Texp_letmodule (_, _, _, _, _, e) ->
                 check e
             | Texp_apply _ | Texp_send _ | Texp_new _ | Texp_letop _ ->
                 Location.prerr_warning exp_loc
@@ -2585,7 +2585,8 @@ let add_resolved_implicits_bindings ~outer_env env exp =
         | _ -> Mp_present
       in
       re {
-        exp_desc = Texp_letmodule(Some id, mkloc None loc, pres, modl, exp);
+        exp_desc =
+          Texp_letmodule(Some id, mkloc None loc, pres, modl, Explicit, exp);
         exp_loc = loc;
         exp_extra = []; (* TODO: signal that we can erase while untyping. *)
         exp_type = exp.exp_type;
@@ -3431,7 +3432,7 @@ and type_expect_
       | _ ->
           assert false
       end
-  | Pexp_letmodule(name, smodl, sbody) ->
+  | Pexp_letmodule(name, smodl, implicit_, sbody) ->
       let ty = newvar() in
       (* remember original level *)
       begin_def ();
@@ -3452,7 +3453,9 @@ and type_expect_
         match name.txt with
         | None -> None, env
         | Some name ->
-          let id, env = Env.enter_module_declaration ~scope name pres md env in
+          let id, env =
+            Env.enter_module_declaration ~scope ~implicit_ name pres md env
+          in
           Some id, env
       in
       Typetexp.widen context;
@@ -3465,7 +3468,7 @@ and type_expect_
       end_def ();
       Ctype.unify_var new_env ty body.exp_type;
       re {
-        exp_desc = Texp_letmodule(id, name, pres, modl, body);
+        exp_desc = Texp_letmodule(id, name, pres, modl, implicit_, body);
         exp_loc = loc; exp_extra = [];
         exp_type = ty;
         exp_attributes = sexp.pexp_attributes;
@@ -3755,8 +3758,10 @@ and type_expect_
       let scoped_ident =
         Ident.create_scoped ~scope:(Ctype.get_current_level()) name.txt
       in
-      let new_env = Env.add_module scoped_ident Mp_present mty_type env in
-      let new_env = Env.add_implicit_instance (Pident scoped_ident) new_env in
+      let new_env =
+        Env.add_module ~implicit_:Explicit scoped_ident Mp_present mty_type env
+      in
+      let new_env = Env.add_implicit_instance scoped_ident new_env in
       let outer_env = new_env in
       let new_env =
         Env.open_implicit_hole_scope ~scope:(Ctype.get_current_level())
@@ -3852,15 +3857,21 @@ and type_expect_
       let name = "?" ^ Ident.name id in
       let scope = Env.implicit_hole_scope env in
       let ident = Ident.create_instantiable ~scope name in
+      let local_ident = Ident.create_local name in
       Env.add_implicit_hole
         { ihl_loc=lid.loc
         ; ihl_ident=ident
+        ; ihl_local_ident= local_ident
         ; ihl_module_type= mty
         ; ihl_deferreds= [] }
         env;
+      let env =
+        Env.add_module ~implicit_:Explicit local_ident Mp_present mty env
+      in
       let modl =
         { mod_desc=
-            Tmod_ident (Pident ident, mkloc (Longident.Lident name) lid.loc)
+            Tmod_ident
+              (Pident local_ident, mkloc (Longident.Lident name) lid.loc)
         ; mod_loc= lid.loc
         ; mod_type= mty
         ; mod_env= env
@@ -4746,7 +4757,8 @@ and type_unpacks ?in_function env unpacks sbody expected_ty =
           md_uid = uid; }
       in
       let (id, env) =
-        Env.enter_module_declaration ~scope name.txt pres md env
+        Env.enter_module_declaration ~implicit_:Explicit ~scope name.txt pres md
+          env
       in
       Typetexp.widen context;
       env, (id, name, pres, modl) :: unpacks
@@ -4765,7 +4777,7 @@ and type_unpacks ?in_function env unpacks sbody expected_ty =
     Ctype.unify_var extended_env ty body.exp_type;
     re {
       exp_desc = Texp_letmodule(Some id, { name with txt = Some name.txt },
-                                pres, modl, body);
+                                pres, modl, Explicit, body);
       exp_loc;
       exp_attributes;
       exp_extra = [];

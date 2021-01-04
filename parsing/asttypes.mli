@@ -44,6 +44,8 @@ type override_flag = Override | Fresh
 
 type closed_flag = Closed | Open
 
+type implicit_flag = Explicit | Implicit
+
 type label = string
 
 type arg_label =

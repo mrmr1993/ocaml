@@ -2462,7 +2462,7 @@ let all_rhs_idents exp =
         (id_mod,_,_,
          {mod_desc=
           Tmod_unpack ({exp_desc=Texp_ident (Path.Pident id_exp,_,_)},_)},
-         _) ->
+         _,_) ->
            assert (Ident.Set.mem id_exp !ids) ;
            begin match id_mod with
            | Some id_mod when not (Ident.Set.mem id_mod !ids) ->

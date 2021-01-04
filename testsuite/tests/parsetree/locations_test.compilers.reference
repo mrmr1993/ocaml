@@ -20,6 +20,7 @@ Ptop_def
     structure_item (//toplevel//[3,2+0]..[3,2+37])
       Pstr_module
       "M" (//toplevel//[3,2+7]..[3,2+8])
+        Explicit
         module_expr (//toplevel//[3,2+11]..[3,2+21])
           attribute "attr"
             [
@@ -123,6 +124,7 @@ Ptop_def
     structure_item (//toplevel//[2,1+0]..[2,1+48])
       Pstr_module
       "F" (//toplevel//[2,1+7]..[2,1+8])
+        Explicit
         module_expr (//toplevel//[2,1+19]..[2,1+48])
           Pmod_functor "A" (//toplevel//[2,1+20]..[2,1+21])
           module_type (//toplevel//[2,1+24]..[2,1+25])
@@ -522,6 +524,7 @@ Ptop_def
             Ppat_var "x" (//toplevel//[4,19+4]..[4,19+5])
           expression (//toplevel//[4,19+8]..[4,19+26])
             Pexp_open Fresh
+              Explicit
             module_expr (//toplevel//[4,19+8]..[4,19+9])
               Pmod_ident "M" (//toplevel//[4,19+8]..[4,19+9])
             expression (//toplevel//[4,19+10]..[4,19+26])
@@ -546,6 +549,7 @@ Ptop_def
             Ppat_var "x" (//toplevel//[2,1+4]..[2,1+5])
           expression (//toplevel//[2,1+8]..[2,1+18])
             Pexp_open Fresh
+              Explicit
             module_expr (//toplevel//[2,1+8]..[2,1+9])
               Pmod_ident "M" (//toplevel//[2,1+8]..[2,1+9])
             expression (//toplevel//[2,1+10]..[2,1+18])
@@ -583,6 +587,7 @@ Ptop_def
             Ppat_var "x" (//toplevel//[2,1+4]..[2,1+5])
           expression (//toplevel//[2,1+8]..[2,1+18])
             Pexp_open Fresh
+              Explicit
             module_expr (//toplevel//[2,1+8]..[2,1+9])
               Pmod_ident "M" (//toplevel//[2,1+8]..[2,1+9])
             expression (//toplevel//[2,1+12]..[2,1+16])
@@ -1039,6 +1044,7 @@ Ptop_def
           pci_expr =
             class_expr (//toplevel//[5,55+2]..[6,71+12])
               Pcl_open Fresh "M" (//toplevel//[5,55+11]..[5,55+12])
+                Explicit
               class_expr (//toplevel//[6,71+2]..[6,71+12])
                 Pcl_structure
                 class_structure

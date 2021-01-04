@@ -352,8 +352,10 @@ and expression_desc =
         (* x <- 2 *)
   | Pexp_override of (label loc * expression) list
         (* {< x1 = E1; ...; Xn = En >} *)
-  | Pexp_letmodule of string option loc * module_expr * expression
-        (* let module M = ME in E *)
+  | Pexp_letmodule of
+      string option loc * module_expr * implicit_flag * expression
+        (* let module M = ME in E
+           let implicit module M = ME in E *)
   | Pexp_letexception of extension_constructor * expression
         (* let exception C in E *)
   | Pexp_assert of expression
@@ -790,6 +792,7 @@ and module_declaration =
     {
      pmd_name: string option loc;
      pmd_type: module_type;
+     pmd_implicit: implicit_flag;
      pmd_attributes: attributes; (* ... [@@id1] [@@id2] *)
      pmd_loc: Location.t;
     }
@@ -818,6 +821,7 @@ and 'a open_infos =
     {
      popen_expr: 'a;
      popen_override: override_flag;
+     popen_implicit: implicit_flag;
      popen_loc: Location.t;
      popen_attributes: attributes;
     }
@@ -828,12 +832,14 @@ and 'a open_infos =
 
 and open_description = Longident.t loc open_infos
 (* open M.N
-   open M(N).O *)
+   open M(N).O
+   open implicit M(N).O *)
 
 and open_declaration = module_expr open_infos
 (* open M.N
    open M(N).O
-   open struct ... end *)
+   open struct ... end
+   open implicit M(N).O *)
 
 and 'a include_infos =
     {
@@ -942,6 +948,7 @@ and module_binding =
     {
      pmb_name: string option loc;
      pmb_expr: module_expr;
+     pmb_implicit: implicit_flag;
      pmb_attributes: attributes;
      pmb_loc: Location.t;
     }
