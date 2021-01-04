@@ -371,7 +371,7 @@ and expression i ppf x =
   | Pexp_letmodule (s, me, implicit_, e) ->
       line i ppf "Pexp_letmodule %a\n" fmt_str_opt_loc s;
       module_expr i ppf me;
-      implicit_flag i ppf implicit_;
+      implicit_flag (i+1) ppf implicit_;
       expression i ppf e;
   | Pexp_letexception (cd, e) ->
       line i ppf "Pexp_letexception\n";
@@ -398,7 +398,7 @@ and expression i ppf x =
       module_expr i ppf me
   | Pexp_open (o, e) ->
       line i ppf "Pexp_open %a\n" fmt_override_flag o.popen_override;
-      implicit_flag i ppf o.popen_implicit;
+      implicit_flag (i+1) ppf o.popen_implicit;
       module_expr i ppf o.popen_expr;
       expression i ppf e
   | Pexp_letop {let_; ands; body} ->
@@ -627,7 +627,7 @@ and class_expr i ppf x =
   | Pcl_open (o, e) ->
       line i ppf "Pcl_open %a %a\n" fmt_override_flag o.popen_override
         fmt_longident_loc o.popen_expr;
-      implicit_flag i ppf o.popen_implicit;
+      implicit_flag (i+1) ppf o.popen_implicit;
       class_expr i ppf e
 
 and class_structure i ppf { pcstr_self = p; pcstr_fields = l } =
@@ -735,7 +735,7 @@ and signature_item i ppf x =
       type_exception i ppf te
   | Psig_module pmd ->
       line i ppf "Psig_module %a\n" fmt_str_opt_loc pmd.pmd_name;
-      implicit_flag i ppf pmd.pmd_implicit;
+      implicit_flag (i+1) ppf pmd.pmd_implicit;
       attributes i ppf pmd.pmd_attributes;
       module_type i ppf pmd.pmd_type
   | Psig_modsubst pms ->
@@ -860,7 +860,7 @@ and structure_item i ppf x =
       modtype_declaration i ppf x.pmtd_type
   | Pstr_open od ->
       line i ppf "Pstr_open %a\n" fmt_override_flag od.popen_override;
-      implicit_flag i ppf od.popen_implicit;
+      implicit_flag (i+1) ppf od.popen_implicit;
       module_expr i ppf od.popen_expr;
       attributes i ppf od.popen_attributes
   | Pstr_class (l) ->
@@ -882,13 +882,13 @@ and structure_item i ppf x =
 
 and module_declaration i ppf pmd =
   str_opt_loc i ppf pmd.pmd_name;
-  implicit_flag i ppf pmd.pmd_implicit;
+  implicit_flag (i+1) ppf pmd.pmd_implicit;
   attributes i ppf pmd.pmd_attributes;
   module_type (i+1) ppf pmd.pmd_type;
 
 and module_binding i ppf x =
   str_opt_loc i ppf x.pmb_name;
-  implicit_flag i ppf x.pmb_implicit;
+  implicit_flag (i+1) ppf x.pmb_implicit;
   attributes i ppf x.pmb_attributes;
   module_expr (i+1) ppf x.pmb_expr
 
