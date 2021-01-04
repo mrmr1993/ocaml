@@ -709,6 +709,7 @@ typing/includemod.cmo : \
     utils/clflags.cmi \
     parsing/builtin_attributes.cmi \
     typing/btype.cmi \
+    parsing/asttypes.cmi \
     typing/includemod.cmi
 typing/includemod.cmx : \
     typing/types.cmx \
@@ -731,6 +732,7 @@ typing/includemod.cmx : \
     utils/clflags.cmx \
     parsing/builtin_attributes.cmx \
     typing/btype.cmx \
+    parsing/asttypes.cmi \
     typing/includemod.cmi
 typing/includemod.cmi : \
     typing/types.cmi \
@@ -740,7 +742,8 @@ typing/includemod.cmi : \
     typing/includecore.cmi \
     typing/ident.cmi \
     typing/env.cmi \
-    typing/ctype.cmi
+    typing/ctype.cmi \
+    parsing/asttypes.cmi
 typing/mtype.cmo : \
     typing/types.cmi \
     typing/subst.cmi \
@@ -1514,6 +1517,7 @@ typing/typeimplicit.cmo : \
     typing/path.cmi \
     parsing/longident.cmi \
     parsing/location.cmi \
+    typing/ident.cmi \
     typing/env.cmi \
     typing/btype.cmi \
     typing/typeimplicit.cmi
@@ -1524,6 +1528,7 @@ typing/typeimplicit.cmx : \
     typing/path.cmx \
     parsing/longident.cmx \
     parsing/location.cmx \
+    typing/ident.cmx \
     typing/env.cmx \
     typing/btype.cmx \
     typing/typeimplicit.cmi
