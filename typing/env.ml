@@ -1312,6 +1312,14 @@ let add_implicit_deferred_check ident deferred env =
     env.implicit_holes
     |> ignore
 
+let find_implicit_hole ident env =
+  match
+    List.find_map (fun (_, map) -> Ident.Map.find_opt ident !map)
+      env.implicit_holes
+  with
+  | Some (implicit_hole, _) -> implicit_hole
+  | None -> raise Not_found
+
 let implicit_holes env =
   match env.implicit_holes with
   | [] -> fatal_error "Env.implicit_module_instances"
